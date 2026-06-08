@@ -26,3 +26,44 @@
 - [ ] Export to WAV (full quality, not just 4-second render)
 - [ ] BPM tap tempo
 - [ ] Master limiter on output
+
+## v0.5.0 — Sequencer power
+- [ ] Multiple pattern banks (A/B/C/D)
+- [ ] Pattern chaining / song mode
+- [ ] Probability per step (chance to trigger)
+- [ ] Parameter locks (per-step FX changes)
+- [ ] Live recording of pad hits into sequencer
+
+## v0.6.0 — Sampling & resampling
+- [ ] Resample master output back into a pad
+- [ ] Loop slicing / chop mode
+- [ ] Time-stretching (basic phase vocoder)
+- [ ] Pitch shift per pad (semitones + fine)
+
+## v0.7.0 — Pre-release polish
+- [ ] Mobile layout optimization
+- [ ] Touch gesture support
+- [ ] Audio latency measurement and compensation
+- [ ] Comprehensive test suite
+- [ ] CI/CD build and deploy to GitHub Pages
+
+## v0.8.0 — Stability
+- [ ] Memory leak audit
+- [ ] Large sample handling (100MB+ files)
+- [ ] Safari/WebKit compatibility fixes
+- [ ] Offline mode stress testing
+- [ ] Beta testing feedback integration
+
+## v0.9.0 — Release candidate
+- [ ] Final feature freeze
+- [ ] Documentation complete
+- [ ] Demo project included
+- [ ] Performance benchmark
+- [ ] Release notes draft
+
+## v1.0.0 — Ship it
+- [ ] Tag v1.0.0
+- [ ] GitHub release with binaries
+- [ ] Announcement post
+- [ ] Video tutorial
+- [ ] Community feedback channel
