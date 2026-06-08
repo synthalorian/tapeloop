@@ -2,11 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#d4a373">
-<link rel="manifest" href="manifest.json">
-<title>TapeLoop — Lo-Fi Sampler / Sequencer</title>
-<style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#d4a373">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <title>TapeLoop — Lo-Fi Sampler / Sequencer</title>
+  <style>
   :root {
     --bg: #0e0f11;
     --panel: #16181c;
@@ -38,6 +40,97 @@
   @media (max-width: 900px) {
     main { grid-template-columns: 1fr; }
   }
+
+  /* Mobile Layout Optimization */
+  @media (max-width: 768px) {
+    html { -webkit-text-size-adjust: 100%; }
+    body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+    header { padding: 8px 12px; gap: 8px; }
+    header h1 { font-size: 14px; letter-spacing: 1px; }
+    .badge { font-size: 10px; }
+    #viz { height: 100px; }
+    main { padding: 8px; gap: 8px; }
+    .panel { padding: 10px; border-radius: 4px; }
+
+    /* Pads: 2 columns on small screens, 4 on tablets */
+    .pads { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+    .pad { border-radius: 8px; min-height: 72px; }
+    .pad .label { font-size: 12px; }
+    .pad .slot { font-size: 10px; }
+
+    /* Transport: wrap nicely */
+    .transport { gap: 6px; margin-bottom: 6px; }
+    .transport button { padding: 10px 12px; font-size: 13px; min-height: 44px; }
+    .bpm { width: 60px; font-size: 14px; }
+
+    /* Sequencer: horizontal scroll */
+    .seq-section { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .seq-grid { grid-template-columns: 40px repeat(16, minmax(28px, 1fr)); min-width: 520px; }
+    .seq-grid .step { height: 32px; }
+    .seq-label { font-size: 9px; }
+    .bank-selector { gap: 4px; }
+    .bank-btn { min-width: 40px; padding: 8px 10px; min-height: 44px; font-size: 13px; }
+
+    /* Song mode */
+    .song-chain { gap: 4px; }
+    .song-slot { width: 32px; height: 36px; font-size: 11px; }
+
+    /* Controls sidebar */
+    .controls { gap: 12px; }
+    .row { gap: 8px; margin-bottom: 4px; }
+    .row label { font-size: 12px; min-width: 70px; }
+    input[type="range"] { min-height: 44px; }
+    button { min-height: 44px; padding: 10px 12px; font-size: 13px; }
+
+    /* Pad edit */
+    .pad-edit input[type="number"] { width: 56px; font-size: 14px; padding: 6px; }
+    .pad-edit .row { margin-bottom: 8px; }
+
+    /* File input */
+    input[type="file"] { font-size: 12px; }
+
+    /* Overlay */
+    .overlay-inner { padding: 16px; width: 95%; max-width: 360px; }
+    .overlay-inner h2 { font-size: 13px; }
+    .overlay-inner table { font-size: 11px; }
+    .overlay-inner td:first-child { width: 80px; }
+
+    /* Scrollable sidebar on mobile */
+    aside.panel.controls {
+      max-height: 60vh;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .pads { grid-template-columns: repeat(2, 1fr); }
+    .transport button { padding: 8px 10px; font-size: 12px; }
+    .seq-grid { min-width: 480px; }
+    .seq-grid .step { height: 28px; }
+    .song-slot { width: 28px; height: 32px; }
+  }
+
+  /* Touch-friendly enhancements */
+  .pad { touch-action: none; -webkit-touch-callout: none; }
+  button, input[type="range"], select, .step, .song-slot {
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Safe area support for notched phones */
+  @supports (padding: max(0px)) {
+    header { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+    main { padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+    .overlay-inner { margin-bottom: env(safe-area-inset-bottom); }
+  }
+
+  /* Active states for touch */
+  .pad:active, .pad.playing { transform: scale(0.96); }
+  button:active { background: #252830; }
+  .step:active { opacity: 0.7; }
   .panel { background: var(--panel); border: 1px solid #222; border-radius: 6px; padding: 12px; }
   .panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 10px; color: var(--accent); }
   .pads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
@@ -140,7 +233,7 @@
 <body>
 <header>
   <h1>TapeLoop</h1>
-  <span class="badge">Lo-Fi Sampler / Sequencer — v0.6.0</span>
+  <span class="badge">Lo-Fi Sampler / Sequencer — v0.7.0</span>
   <span id="status" class="status" style="margin-left:auto">Click Start Audio</span>
 </header>
 <canvas id="viz"></canvas>
@@ -259,11 +352,24 @@
   </div>
 </div>
 
-<script>
+<script type="module">
 /* ================================================================
    TapeLoop — vanilla JS lo-fi sampler/sequencer + WebGL visualizer
-   v0.6.0 — Resample, loop slicing, time-stretch, pitch shift
+   v0.7.0 — Mobile layout, touch gestures, latency compensation, tests, CI/CD
    ================================================================ */
+
+import {
+  STEPS, PADS, BANKS,
+  createEmptyPattern, normalizePattern,
+  cycleProbability, toggleStep,
+  createEmptySong, nextSongStep,
+  calculateBPMFromIntervals, scheduleAheadTimeMs
+} from './src/patterns.js';
+
+import {
+  bufferToWav, fft, ifft, autoSlice,
+  calculatePitchRate, bitcrushParams, limiterThreshold
+} from './src/audio-utils.js';
 
 // Service Worker registration
 if ('serviceWorker' in navigator) {
@@ -401,6 +507,12 @@ const SONG_SLOTS = 16;
 let songChain = Array(SONG_SLOTS).fill(null); // null = empty
 let songStep = 0; // which slot in song chain
 
+// Audio latency measurement and compensation
+let measuredLatency = 0;
+let baseLatency = 0;
+let outputLatency = 0;
+let latencyCompensation = 0;
+
 // Edit modes: null, 'prob', 'lock'
 let editMode = null;
 let lockParam = 'wobble';
@@ -429,6 +541,64 @@ function selectPad(index) {
   $$('.pad').forEach((p, i) => p.classList.toggle('selected', i === index));
   updatePadEditUI();
 }
+
+// Touch gesture support for pads
+const activeTouches = new Map();
+
+function handleTouchStart(e) {
+  e.preventDefault();
+  const pad = e.currentTarget;
+  const idx = +pad.dataset.idx;
+  for (const touch of e.changedTouches) {
+    activeTouches.set(touch.identifier, idx);
+    pad.classList.add('playing');
+    triggerPad(idx);
+    selectPad(idx);
+  }
+}
+
+function handleTouchEnd(e) {
+  e.preventDefault();
+  const pad = e.currentTarget;
+  for (const touch of e.changedTouches) {
+    const idx = activeTouches.get(touch.identifier);
+    if (idx !== undefined) {
+      activeTouches.delete(touch.identifier);
+      const p = padsEl.children[idx];
+      if (p) p.classList.remove('playing');
+    }
+  }
+}
+
+function handleTouchMove(e) {
+  e.preventDefault();
+  // Optional: swipe detection for pad navigation
+  const pad = e.currentTarget;
+  const idx = +pad.dataset.idx;
+  for (const touch of e.changedTouches) {
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (el && el.classList.contains('pad')) {
+      const newIdx = +el.dataset.idx;
+      if (newIdx !== idx && activeTouches.get(touch.identifier) === idx) {
+        activeTouches.set(touch.identifier, newIdx);
+        pad.classList.remove('playing');
+        el.classList.add('playing');
+        triggerPad(newIdx);
+        selectPad(newIdx);
+      }
+    }
+  }
+}
+
+padsEl.addEventListener('touchstart', (e) => {
+  if (e.target.closest('.pad')) handleTouchStart({ preventDefault: () => e.preventDefault(), changedTouches: e.changedTouches, currentTarget: e.target.closest('.pad') });
+}, { passive: false });
+padsEl.addEventListener('touchend', (e) => {
+  if (e.target.closest('.pad')) handleTouchEnd({ preventDefault: () => e.preventDefault(), changedTouches: e.changedTouches, currentTarget: e.target.closest('.pad') });
+}, { passive: false });
+padsEl.addEventListener('touchmove', (e) => {
+  if (e.target.closest('.pad')) handleTouchMove({ preventDefault: () => e.preventDefault(), changedTouches: e.changedTouches, currentTarget: e.target.closest('.pad') });
+}, { passive: false });
 
 function updatePadEditUI() {
   const panel = $('#padEditPanel');
@@ -815,6 +985,59 @@ $('#btnRecSeq').addEventListener('click', () => {
   $('#status').textContent = isRecordingSeq ? 'Recording to sequencer...' : 'Recording stopped';
 });
 
+function measureAudioLatency() {
+  // Use AudioContext.baseLatency and outputLatency if available
+  baseLatency = audioCtx.baseLatency || 0;
+  outputLatency = audioCtx.outputLatency || 0;
+  // Combined compensation: negative values shift audio earlier to compensate for output delay
+  latencyCompensation = -(baseLatency + outputLatency);
+
+  // Fallback measurement using round-trip oscillator technique
+  if (!audioCtx.outputLatency) {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    const bufLen = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufLen);
+    osc.connect(gain);
+    gain.connect(analyser);
+    analyser.connect(audioCtx.destination);
+    gain.gain.value = 0.001; // very quiet
+    osc.frequency.value = 1000;
+    const startTime = audioCtx.currentTime;
+    osc.start(startTime);
+    // Detect when sound reaches output
+    const check = () => {
+      analyser.getByteTimeDomainData(dataArray);
+      let max = 0;
+      for (let i = 0; i < bufLen; i++) max = Math.max(max, Math.abs(dataArray[i] - 128));
+      if (max > 10) {
+        measuredLatency = audioCtx.currentTime - startTime;
+        latencyCompensation = -measuredLatency;
+        osc.stop();
+        gain.disconnect();
+        analyser.disconnect();
+        updateLatencyDisplay();
+      } else {
+        requestAnimationFrame(check);
+      }
+    };
+    requestAnimationFrame(check);
+    setTimeout(() => {
+      if (osc) { osc.stop(); gain.disconnect(); analyser.disconnect(); }
+    }, 500);
+  }
+  updateLatencyDisplay();
+}
+
+function updateLatencyDisplay() {
+  const total = baseLatency + outputLatency + measuredLatency;
+  if (total > 0) {
+    $('#status').textContent = `Audio ready — latency: ${(total * 1000).toFixed(1)}ms`;
+  }
+}
+
 function initAudio() {
   if (isAudioStarted) return;
   const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -908,6 +1131,7 @@ function initAudio() {
   convolver.connect(recorderDest);
 
   isAudioStarted = true;
+  measureAudioLatency();
   $('#status').textContent = 'Audio ready';
 }
 
@@ -1102,8 +1326,8 @@ async function resampleMaster() {
 $('#btnResample').addEventListener('click', resampleMaster);
 
 function scheduler() {
-  while (nextNoteTime < audioCtx.currentTime + scheduleAheadTime) {
-    scheduleNote(currentStep, nextNoteTime);
+  while (nextNoteTime < audioCtx.currentTime + scheduleAheadTime + latencyCompensation) {
+    scheduleNote(currentStep, nextNoteTime - latencyCompensation);
     nextNoteTime += (60.0 / bpm) / 4; // 16th notes
     currentStep++;
 
