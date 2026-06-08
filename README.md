@@ -5,7 +5,7 @@ A lo-fi audio sampler and sequencer in the browser. Record loops, apply tape eff
 ## Features
 
 - 🎹 **8 sample pads** — click or press `1-8` to trigger
-- 🎚️ **16-step sequencer** — toggle steps, set BPM
+- 🎚️ **Dual 16-step sequencers** — two independent tracks with mute and solo, synced playback
 - 🎛️ **Lo-fi effects** — tape wobble, bitcrush, lowpass filter, delay, chorus, compressor
 - 📺 **Visualizer** — retro frequency bars reacting to audio
 - 💾 **Record/export** — capture your mix to `.webm`
@@ -36,7 +36,8 @@ python -m http.server 8080
 | Double-click pad | Load sample via file dialog |
 | Drop audio file on pad | Load sample via drag-and-drop |
 | ⬇ on pad | Export that pad's sample as WAV |
-| Sequencer grid | Toggle steps |
+| Sequencer grid (Track 1 / Track 2) | Toggle steps per track |
+| MUTE / SOLO buttons | Mute or solo each sequencer track |
 | BPM slider | Set tempo |
 | TAP button | Tap to calculate BPM |
 | Wobble / Crush / Filter / Resonance knobs | Adjust effects |
