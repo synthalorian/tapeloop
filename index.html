@@ -414,6 +414,7 @@ import { createAudioErrorBoundary, syncAudioTry, safeDecodeAudioData, wrapAudioN
 import { createCrashRecovery } from './src/crash-recovery.js';
 import { migrateState, CURRENT_SCHEMA_VERSION, getStoredSchemaVersion, setStoredSchemaVersion } from './src/migration.js';
 import { createPerformanceMonitor } from './src/performance-monitor.js';
+import { createMemoryMonitor, createReferenceCounter } from './src/memory-monitor.js';
 
 // Service Worker registration
 if ('serviceWorker' in navigator) {
@@ -430,6 +431,15 @@ const crashRecovery = createCrashRecovery(logger);
 const audioTry = createAudioErrorBoundary(logger, (type, err, msg) => {
   $('#status').textContent = msg;
 });
+const memMonitor = createMemoryMonitor(logger, {
+  checkInterval: 60000,
+  growthThreshold: 1.5,
+  onLeak: (leak) => {
+    $('#status').textContent = `Leak warning: ${leak.message}`;
+  }
+});
+const activeSourceCounter = createReferenceCounter();
+memMonitor.registerTracker('audio-sources', () => activeSourceCounter.count());
 logger.info('TapeLoop v0.8.0 initializing');
 
 let audioCtx, masterGain, convolver, filterNode, bitcrusherNode, wobbleNode, wobbleLFO, limiterNode;
@@ -1020,6 +1030,7 @@ function initAudio() {
   isAudioStarted = true;
   measureAudioLatency();
   perfMonitor.start();
+  memMonitor.start();
 
   // Crash recovery: auto-save state every 30s
   crashRecovery.startAutoSave(() => {
@@ -1065,6 +1076,18 @@ function triggerPad(index, when = null, sliceIndex = null) {
 
   src.connect(masterGain);
   src.start(t);
+
+  // Track and auto-cleanup source to prevent memory leaks
+  const sourceId = `src_${index}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  activeSourceCounter.add(sourceId);
+  src.onended = () => {
+    try {
+      src.disconnect();
+    } catch (e) {
+      // Already disconnected or context closed
+    }
+    activeSourceCounter.remove(sourceId);
+  };
 
   // Live recording
   if (isRecordingSeq && isPlayingSeq && index < 4) {
@@ -1369,6 +1392,9 @@ async function exportWAV() {
   og.connect(lp); lp.connect(bc); bc.connect(wd); wd.connect(cv);
   cv.connect(wet); wet.connect(lim); lim.connect(offlineCtx.destination);
 
+  // Track offline nodes for cleanup
+  const offlineNodes = [og, lp, bc, wd, lfo, lfoG, cv, wet, lim];
+
   // Render sequence
   const stepTime = (60.0 / bpm) / 4;
   let step = 0;
@@ -1404,6 +1430,12 @@ async function exportWAV() {
 
   try {
     const rendered = await offlineCtx.startRendering();
+
+    // Disconnect all offline nodes to free memory
+    offlineNodes.forEach(node => {
+      try { node.disconnect(); } catch (e) {}
+    });
+
     const wavBlob = bufferToWav(rendered);
     const url = URL.createObjectURL(wavBlob);
     const a = document.createElement('a');
@@ -1783,6 +1815,51 @@ $('#btnShowLogs').addEventListener('click', () => {
 
 // Check for crash recovery on load
 setTimeout(checkCrashRecovery, 1000);
+
+// Memory leak prevention: cleanup on page unload
+window.addEventListener('beforeunload', () => {
+  // Stop all timers and monitors
+  if (timerID) clearTimeout(timerID);
+  perfMonitor.stop();
+  memMonitor.stop();
+  crashRecovery.stopAutoSave();
+
+  // Disconnect all active audio nodes
+  if (masterGain) {
+    try { masterGain.disconnect(); } catch (e) {}
+  }
+  if (filterNode) {
+    try { filterNode.disconnect(); } catch (e) {}
+  }
+  if (bitcrusherNode) {
+    try { bitcrusherNode.disconnect(); } catch (e) {}
+  }
+  if (wobbleNode) {
+    try { wobbleNode.disconnect(); } catch (e) {}
+  }
+  if (wobbleLFO) {
+    try { wobbleLFO.stop(); wobbleLFO.disconnect(); } catch (e) {}
+  }
+  if (convolver) {
+    try { convolver.disconnect(); } catch (e) {}
+  }
+  if (limiterNode) {
+    try { limiterNode.disconnect(); } catch (e) {}
+  }
+  if (audioCtx) {
+    try { audioCtx.close(); } catch (e) {}
+  }
+
+  // Delete WebGL resources
+  if (gl) {
+    try {
+      gl.deleteProgram(prog);
+      gl.deleteBuffer(gl.createBuffer());
+    } catch (e) {}
+  }
+
+  logger.info('TapeLoop shutdown complete');
+});
 </script>
 </body>
 </html>
