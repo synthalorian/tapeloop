@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TapeLoop — Lo-Fi Sampler / Sequencer</title>
+<style>
+  :root {
+    --bg: #0e0f11;
+    --panel: #16181c;
+    --accent: #d4a373;
+    --accent2: #8ecae6;
+    --text: #e6e1d7;
+    --muted: #7a7568;
+    --danger: #e76f51;
+    --ok: #2a9d8f;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Courier New", Courier, monospace;
+    display: flex; flex-direction: column;
+  }
+  header {
+    padding: 10px 16px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid #222;
+  }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: 2px; text-transform: uppercase; }
+  .badge { font-size: 11px; color: var(--muted); }
+  #viz { width: 100%; height: 160px; background: #000; }
+  main { flex: 1; display: grid; grid-template-columns: 1fr 280px; gap: 12px; padding: 12px; }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+  }
+  .panel { background: var(--panel); border: 1px solid #222; border-radius: 6px; padding: 12px; }
+  .panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 10px; color: var(--accent); }
+  .pads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .pad {
+    aspect-ratio: 1 / 1;
+    background: #1e2026;
+    border: 1px solid #2a2d35;
+    border-radius: 6px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; user-select: none; transition: transform .06s, border-color .15s, background .15s;
+  }
+  .pad:hover { border-color: var(--accent); }
+  .pad:active, .pad.playing { transform: scale(0.97); background: #252830; border-color: var(--accent2); }
+  .pad .label { font-size: 11px; color: var(--muted); }
+  .pad .slot { font-size: 10px; color: #555; margin-top: 4px; }
+  .controls { display: flex; flex-direction: column; gap: 10px; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .row label { font-size: 11px; color: var(--muted); min-width: 90px; }
+  input[type="range"] { flex: 1; }
+  button {
+    background: #1e2026; color: var(--text); border: 1px solid #2a2d35;
+    border-radius: 4px; padding: 8px 10px; cursor: pointer; font-family: inherit; font-size: 12px;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { border-color: var(--accent); color: var(--accent); }
+  button.danger { border-color: var(--danger); color: var(--danger); }
+  button.ok { border-color: var(--ok); color: var(--ok); }
+  .transport { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .bpm { width: 70px; }
+  .seq-grid {
+    display: grid;
+    grid-template-columns: 40px repeat(16, 1fr);
+    gap: 4px; align-items: center;
+  }
+  .seq-grid .step {
+    height: 22px; background: #1e2026; border: 1px solid #2a2d35; border-radius: 3px; cursor: pointer;
+  }
+  .seq-grid .step.on { background: var(--accent); border-color: var(--accent); }
+  .seq-grid .step.current { outline: 2px solid var(--accent2); }
+  .seq-label { font-size: 10px; color: var(--muted); }
+  .status { font-size: 11px; color: var(--muted); }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>TapeLoop</h1>
+  <span class="badge">Lo-Fi Sampler / Sequencer</span>
+  <span id="status" class="status" style="margin-left:auto">Click Start Audio</span>
+</header>
+<canvas id="viz"></canvas>
+<main>
+  <section class="panel">
+    <div class="transport">
+      <button id="btnStart" class="primary">Start Audio</button>
+      <button id="btnRec" class="danger">Record</button>
+      <button id="btnStop">Stop</button>
+      <label style="font-size:11px;color:var(--muted)">BPM</label>
+      <input id="bpm" class="bpm" type="number" value="90" min="40" max="200">
+      <button id="btnPlaySeq" class="ok">Play Seq</button>
+    </div>
+    <div class="pads" id="pads"></div>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <label style="font-size:11px;color:var(--muted)">Load sample</label>
+      <input type="file" id="fileInput" accept="audio/*" multiple style="font-size:11px;color:var(--muted);">
+      <button id="btnExport">Export Mix</button>
+    </div>
+  </section>
+
+  <aside class="panel controls">
+    <h2>Effects</h2>
+    <div class="row"><label>Wobble</label><input id="wobble" type="range" min="0" max="1" step="0.01" value="0"></div>
+    <div class="row"><label>Bitcrush</label><input id="bitcrush" type="range" min="0" max="1" step="0.01" value="0"></div>
+    <div class="row"><label>Filter</label><input id="filter" type="range" min="100" max="8000" step="10" value="8000"></div>
+    <div class="row"><label>Reverb</label><input id="reverb" type="range" min="0" max="1" step="0.01" value="0"></div>
+    <div class="row"><label>Volume</label><input id="masterVol" type="range" min="0" max="1" step="0.01" value="0.8"></div>
+
+    <h2 style="margin-top:14px">Sequencer</h2>
+    <div id="sequencer" class="seq-grid"></div>
+    <div class="status" style="margin-top:6px">Rows = pads 1-4. Click steps to toggle.</div>
+  </aside>
+</main>
+
+<script>
+/* ================================================================
+   TapeLoop — vanilla JS lo-fi sampler/sequencer + WebGL visualizer
+   ================================================================ */
+
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => Array.from(document.querySelectorAll(s));
+
+let audioCtx, masterGain, convolver, filterNode, bitcrusherNode, wobbleNode, wobbleLFO;
+let recorderDest, mediaRecorder, recordedChunks = [];
+let isAudioStarted = false;
+let isRecording = false;
+let isPlayingSeq = false;
+let currentStep = 0;
+let nextNoteTime = 0;
+let timerID = null;
+const STEPS = 16;
+const PADS = 16;
+let bpm = 90;
+let lookahead = 25.0; // ms
+let scheduleAheadTime = 0.1; // s
+
+const buffers = new Array(PADS).fill(null);
+const padNames = [
+  "KICK","SNARE","CLAP","HAT",
+  "BASS","KEYS","PAD","FX",
+  "PERC","VOX","BELL","NOISE",
+  "SYN1","SYN2","SYN3","SYN4"
+];
+
+// Sequencer pattern: 4 rows x 16 steps (first 4 pads)
+let pattern = Array.from({length: 4}, () => new Array(STEPS).fill(false));
+
+// UI: build pads
+const padsEl = $('#pads');
+for (let i = 0; i < PADS; i++) {
+  const d = document.createElement('div');
+  d.className = 'pad';
+  d.dataset.idx = i;
+  d.innerHTML = `<span class="label">${padNames[i]}</span><span class="slot" id="slot${i}">empty</span>`;
+  d.addEventListener('mousedown', () => triggerPad(i));
+  padsEl.appendChild(d);
+}
+
+// UI: build sequencer grid
+const seqEl = $('#sequencer');
+for (let r = 0; r < 4; r++) {
+  const lbl = document.createElement('div');
+  lbl.className = 'seq-label';
+  lbl.textContent = padNames[r];
+  seqEl.appendChild(lbl);
+  for (let s = 0; s < STEPS; s++) {
+    const step = document.createElement('div');
+    step.className = 'step';
+    step.dataset.row = r;
+    step.dataset.col = s;
+    step.addEventListener('click', () => {
+      pattern[r][s] = !pattern[r][s];
+      step.classList.toggle('on', pattern[r][s]);
+    });
+    seqEl.appendChild(step);
+  }
+}
+
+function updateStepUI() {
+  $$('.step').forEach(el => el.classList.remove('current'));
+  for (let r = 0; r < 4; r++) {
+    const el = seqEl.querySelector(`.step[data-row="${r}"][data-col="${currentStep}"]`);
+    if (el) el.classList.add('current');
+  }
+}
+
+function initAudio() {
+  if (isAudioStarted) return;
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  audioCtx = new AudioContext();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0.8;
+
+  // Lowpass filter
+  filterNode = audioCtx.createBiquadFilter();
+  filterNode.type = 'lowpass';
+  filterNode.frequency.value = 8000;
+
+  // Bitcrush (downsample via ScriptProcessor)
+  const createBitcrusher = () => {
+    const node = audioCtx.createScriptProcessor(4096, 1, 1);
+    let bits = 16, normFreq = 1;
+    node.bits = bits; node.normFreq = normFreq;
+    node.onaudioprocess = (e) => {
+      const inBuf = e.inputBuffer.getChannelData(0);
+      const outBuf = e.outputBuffer.getChannelData(0);
+      const step = Math.pow(0.5, node.bits);
+      let ph = 0;
+      for (let i = 0; i < inBuf.length; i++) {
+        ph += node.normFreq;
+        if (ph >= 1) { ph -= 1; outBuf[i] = step * Math.floor(inBuf[i] / step + 0.5); }
+        else { outBuf[i] = outBuf[i - 1] || 0; }
+      }
+    };
+    return node;
+  };
+  bitcrusherNode = createBitcrusher();
+
+  // Wobble (pitch drift via delay modulation)
+  const createWobble = () => {
+    const delay = audioCtx.createDelay(1.0);
+    const lfo = audioCtx.createOscillator();
+    const lfoGain = audioCtx.createGain();
+    lfo.type = 'sine';
+    lfo.frequency.value = 0; // off by default
+    lfoGain.gain.value = 0.003; // small delay modulation
+    lfo.connect(lfoGain);
+    lfoGain.connect(delay.delayTime);
+    lfo.start();
+    return { node: delay, lfo, lfoGain };
+  };
+  const wobble = createWobble();
+  wobbleNode = wobble.node;
+  wobbleLFO = wobble.lfo;
+
+  // Reverb (convolver with generated impulse)
+  convolver = audioCtx.createConvolver();
+  const setReverb = (sec, decay, reverse) => {
+    const rate = audioCtx.sampleRate;
+    const len = rate * sec;
+    const impulse = audioCtx.createBuffer(2, len, rate);
+    for (let c = 0; c < 2; c++) {
+      const ch = impulse.getChannelData(c);
+      for (let i = 0; i < len; i++) {
+        const n = reverse ? len - i : i;
+        ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - n / len, decay);
+      }
+    }
+    convolver.buffer = impulse;
+  };
+  setReverb(1.5, 2.0, false);
+
+  // Chain: master -> filter -> bitcrusher -> wobble(delay) -> convolver -> destination
+  masterGain.connect(filterNode);
+  filterNode.connect(bitcrusherNode);
+  bitcrusherNode.connect(wobbleNode);
+  wobbleNode.connect(convolver);
+  convolver.connect(audioCtx.destination);
+
+  // Recorder destination
+  recorderDest = audioCtx.createMediaStreamDestination();
+  convolver.connect(recorderDest);
+
+  isAudioStarted = true;
+  $('#status').textContent = 'Audio ready';
+}
+
+function triggerPad(index, when = null) {
+  if (!isAudioStarted) return;
+  const buf = buffers[index];
+  if (!buf) return;
+  const t = when == null ? audioCtx.currentTime : when;
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.connect(masterGain);
+  src.start(t);
+  // Visual feedback
+  const pad = padsEl.children[index];
+  pad.classList.add('playing');
+  setTimeout(() => pad.classList.remove('playing'), 120);
+}
+
+// File loading
+$('#fileInput').addEventListener('change', async (e) => {
+  if (!isAudioStarted) initAudio();
+  const files = Array.from(e.target.files);
+  for (let i = 0; i < Math.min(files.length, PADS); i++) {
+    const ab = await files[i].arrayBuffer();
+    const buf = await audioCtx.decodeAudioData(ab);
+    buffers[i] = buf;
+    $(`#slot${i}`).textContent = files[i].name.slice(0, 14);
+  }
+});
+
+// Controls
+$('#btnStart').addEventListener('click', () => { initAudio(); audioCtx.resume(); });
+$('#btnStop').addEventListener('click', () => {
+  if (audioCtx) audioCtx.suspend();
+  isPlayingSeq = false; clearTimeout(timerID);
+  $('#status').textContent = 'Stopped';
+});
+
+$('#btnRec').addEventListener('click', () => {
+  if (!isAudioStarted) initAudio();
+  if (isRecording) {
+    mediaRecorder.stop();
+    isRecording = false;
+    $('#btnRec').textContent = 'Record';
+    $('#status').textContent = 'Recording stopped';
+    return;
+  }
+  recordedChunks = [];
+  mediaRecorder = new MediaRecorder(recorderDest.stream);
+  mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'tapeloop-mix.webm'; a.click();
+    URL.revokeObjectURL(url);
+  };
+  mediaRecorder.start();
+  isRecording = true;
+  $('#btnRec').textContent = 'Stop Rec';
+  $('#status').textContent = 'Recording...';
+});
+
+$('#bpm').addEventListener('input', (e) => { bpm = Math.max(40, Math.min(200, +e.target.value)); });
+
+$('#btnPlaySeq').addEventListener('click', () => {
+  if (!isAudioStarted) initAudio();
+  if (isPlayingSeq) { isPlayingSeq = false; clearTimeout(timerID); $('#btnPlaySeq').textContent = 'Play Seq'; return; }
+  isPlayingSeq = true; currentStep = 0; nextNoteTime = audioCtx.currentTime + 0.05;
+  $('#btnPlaySeq').textContent = 'Stop Seq';
+  scheduler();
+});
+
+function scheduler() {
+  while (nextNoteTime < audioCtx.currentTime + scheduleAheadTime) {
+    scheduleNote(currentStep, nextNoteTime);
+    nextNoteTime += (60.0 / bpm) / 4; // 16th notes
+    currentStep = (currentStep + 1) % STEPS;
+  }
+  if (isPlayingSeq) timerID = setTimeout(scheduler, lookahead);
+}
+
+function scheduleNote(step, time) {
+  for (let r = 0; r < 4; r++) {
+    if (pattern[r][step]) triggerPad(r, time);
+  }
+  // Update UI on main thread near time
+  const dt = Math.max(0, (time - audioCtx.currentTime) * 1000);
+  setTimeout(() => { if (isPlayingSeq) updateStepUI(); }, dt);
+}
+
+// Effects bindings
+$('#wobble').addEventListener('input', (e) => {
+  const v = +e.target.value;
+  if (wobbleLFO) wobbleLFO.frequency.setTargetAtTime(v * 5, audioCtx.currentTime, 0.02);
+});
+$('#bitcrush').addEventListener('input', (e) => {
+  const v = +e.target.value;
+  if (bitcrusherNode) {
+    bitcrusherNode.bits = v < 0.01 ? 16 : Math.max(2, 16 - Math.floor(v * 14));
+    bitcrusherNode.normFreq = v < 0.01 ? 1 : Math.max(0.02, 1 - v * 0.98);
+  }
+});
+$('#filter').addEventListener('input', (e) => {
+  const v = +e.target.value;
+  if (filterNode) filterNode.frequency.setTargetAtTime(v, audioCtx.currentTime, 0.02);
+});
+$('#reverb').addEventListener('input', (e) => {
+  const v = +e.target.value;
+  if (convolver) convolverGain.gain.setTargetAtTime(v, audioCtx.currentTime, 0.02);
+});
+$('#masterVol').addEventListener('input', (e) => {
+  const v = +e.target.value;
+  if (masterGain) masterGain.gain.setTargetAtTime(v, audioCtx.currentTime, 0.02);
+});
+
+// Reverb dry/wet via gain node (inserted after convolver)
+const convolverGain = audioCtx ? audioCtx.createGain() : null;
+if (convolverGain) {
+  convolverGain.gain.value = 0;
+  convolver.connect(convolverGain);
+  convolverGain.connect(audioCtx.destination);
+}
+// Rebuild chain with convolverGain if needed — simplified: just use convolver wet level by scaling output
+// We'll patch by connecting convolver -> convolverGain -> destination, and master bypass stays.
+// Actually simpler: keep convolver in chain and adjust its output via a gain node inserted after it.
+// Re-wire below after elements exist.
+function rewireReverb() {
+  if (!audioCtx) return;
+  convolver.disconnect();
+  const wet = audioCtx.createGain();
+  wet.gain.value = 0;
+  convolver.connect(wet);
+  wet.connect(audioCtx.destination);
+  // expose for control
+  window._wetGain = wet;
+}
+// Hook rewire after first user gesture
+$('#btnStart').addEventListener('click', () => {
+  setTimeout(rewireReverb, 0);
+}, { once: true });
+
+// Override reverb control to use wet gain
+$('#reverb').addEventListener('input', (e) => {
+  const v = +e.target.value;
+  if (window._wetGain) window._wetGain.gain.setTargetAtTime(v, audioCtx.currentTime, 0.02);
+});
+
+// Export mix (same as record then download)
+$('#btnExport').addEventListener('click', () => {
+  if (!isAudioStarted) { alert('Start audio first'); return; }
+  $('#btnRec').click();
+  setTimeout(() => $('#btnRec').click(), 4000);
+  $('#status').textContent = 'Exporting 4s mix...';
+});
+
+// Keyboard shortcuts: 1-8 trigger pads 0-7
+window.addEventListener('keydown', (e) => {
+  if (e.key >= '1' && e.key <= '8') triggerPad(+e.key - 1);
+  if (e.key === ' ') { e.preventDefault(); $('#btnPlaySeq').click(); }
+});
+
+/* =========================
+   WebGL Tape Visualizer
+   ========================= */
+const canvas = $('#viz');
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+function resizeCanvas() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = Math.floor(w * dpr); canvas.height = Math.floor(h * dpr);
+  if (gl) gl.viewport(0, 0, canvas.width, canvas.height);
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+function createShader(gl, type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    console.error(gl.getShaderInfoLog(s)); gl.deleteShader(s); return null;
+  }
+  return s;
+}
+
+const vsSrc = `
+attribute vec2 a_pos;
+void main(){ gl_Position = vec4(a_pos, 0.0, 1.0); }
+`;
+const fsSrc = `
+precision mediump float;
+uniform float u_time;
+uniform vec2 u_res;
+uniform float u_wobble;
+uniform float u_bitcrush;
+
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+float noise(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  float a = hash(i), b = hash(i+vec2(1,0)), c = hash(i+vec2(0,1)), d = hash(i+vec2(1,1));
+  vec2 u = f*f*(3.0-2.0*f);
+  return mix(a,b,u.x) + (c-a)*u.y*(1.0-u.x) + (d-b)*u.x*u.y;
+}
+void main(){
+  vec2 uv = gl_FragCoord.xy / u_res;
+  float t = u_time;
+  float drift = sin(uv.y * 12.0 + t * 2.0) * 0.02 * u_wobble;
+  float scan = sin(uv.y * 200.0 + t * 10.0) * 0.01;
+  float n = noise(vec2(uv.x*4.0 + drift, uv.y*2.0 + t*0.3));
+  float band = smoothstep(0.35, 0.55, uv.y + drift + scan + n*0.06);
+  float crush = step(0.5, fract(uv.x * (8.0 + u_bitcrush * 40.0) + t));
+  vec3 col1 = vec3(0.06,0.07,0.09);
+  vec3 col2 = vec3(0.83,0.64,0.45); // accent
+  vec3 col3 = vec3(0.55,0.79,0.90); // accent2
+  vec3 c = mix(col1, mix(col2, col3, crush), band * 0.8);
+  // vignette
+  float vig = 1.0 - length((uv - 0.5) * 1.6);
+  c *= clamp(vig, 0.0, 1.0);
+  gl_FragColor = vec4(c, 1.0);
+}
+`;
+
+let prog, aPos, uTime, uRes, uWobble, uBitcrush;
+if (gl) {
+  const vs = createShader(gl, gl.VERTEX_SHADER, vsSrc);
+  const fs = createShader(gl, gl.FRAGMENT_SHADER, fsSrc);
+  prog = gl.createProgram();
+  gl.attachShader(prog, vs); gl.attachShader(prog, fs);
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) console.error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+  aPos = gl.getAttribLocation(prog, 'a_pos');
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+  uTime = gl.getUniformLocation(prog, 'u_time');
+  uRes = gl.getUniformLocation(prog, 'u_res');
+  uWobble = gl.getUniformLocation(prog, 'u_wobble');
+  uBitcrush = gl.getUniformLocation(prog, 'u_bitcrush');
+}
+
+function renderViz(time) {
+  if (!gl) return;
+  gl.clearColor(0,0,0,1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.uniform1f(uTime, time * 0.001);
+  gl.uniform2f(uRes, canvas.width, canvas.height);
+  gl.uniform1f(uWobble, +$('#wobble').value);
+  gl.uniform1f(uBitcrush, +$('#bitcrush').value);
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+  requestAnimationFrame(renderViz);
+}
+requestAnimationFrame(renderViz);
+</script>
+</body>
+</html>
