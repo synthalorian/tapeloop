@@ -65,19 +65,53 @@
   button.primary { border-color: var(--accent); color: var(--accent); }
   button.danger { border-color: var(--danger); color: var(--danger); }
   button.ok { border-color: var(--ok); color: var(--ok); }
-  .transport { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  button.active { background: var(--accent); color: #000; border-color: var(--accent); }
+  button.active.danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+  .transport { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
   .bpm { width: 70px; }
+
+  /* Sequencer */
+  .seq-section { margin-top: 10px; }
+  .bank-selector { display: flex; gap: 6px; margin-bottom: 8px; align-items: center; flex-wrap: wrap; }
+  .bank-selector label { font-size: 11px; color: var(--muted); }
+  .bank-btn { min-width: 36px; padding: 6px 10px; }
+  .bank-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
   .seq-grid {
     display: grid;
-    grid-template-columns: 40px repeat(16, 1fr);
+    grid-template-columns: 50px repeat(16, 1fr);
     gap: 4px; align-items: center;
   }
   .seq-grid .step {
-    height: 22px; background: #1e2026; border: 1px solid #2a2d35; border-radius: 3px; cursor: pointer;
+    height: 28px; background: #1e2026; border: 1px solid #2a2d35; border-radius: 3px; cursor: pointer;
+    position: relative; overflow: hidden; transition: opacity 0.1s;
   }
   .seq-grid .step.on { background: var(--accent); border-color: var(--accent); }
   .seq-grid .step.current { outline: 2px solid var(--accent2); }
+  .seq-grid .step.prob-75 { opacity: 0.75; }
+  .seq-grid .step.prob-50 { opacity: 0.5; }
+  .seq-grid .step.prob-25 { opacity: 0.25; }
+  .seq-grid .step.locked::after {
+    content: ''; position: absolute; bottom: 2px; right: 2px; width: 6px; height: 6px;
+    background: var(--accent2); border-radius: 50%;
+  }
   .seq-label { font-size: 10px; color: var(--muted); }
+
+  .seq-tools { display: flex; gap: 8px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
+  .seq-tools label { font-size: 11px; color: var(--muted); }
+
+  /* Song mode */
+  .song-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #222; }
+  .song-chain { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+  .song-slot {
+    width: 36px; height: 32px; background: #1e2026; border: 1px solid #2a2d35;
+    border-radius: 3px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: var(--muted);
+  }
+  .song-slot:hover { border-color: var(--accent); }
+  .song-slot.active { background: var(--accent); color: #000; border-color: var(--accent); }
+  .song-slot.empty { color: #444; }
+
   .status { font-size: 11px; color: var(--muted); }
   .hidden { display: none; }
   .overlay {
@@ -98,7 +132,7 @@
 <body>
 <header>
   <h1>TapeLoop</h1>
-  <span class="badge">Lo-Fi Sampler / Sequencer — v0.4.0</span>
+  <span class="badge">Lo-Fi Sampler / Sequencer — v0.5.0</span>
   <span id="status" class="status" style="margin-left:auto">Click Start Audio</span>
 </header>
 <canvas id="viz"></canvas>
@@ -112,6 +146,8 @@
       <input id="bpm" class="bpm" type="number" value="90" min="40" max="200">
       <button id="btnTap">Tap</button>
       <button id="btnPlaySeq" class="ok">Play Seq</button>
+      <button id="btnRecSeq" class="danger">Rec Seq</button>
+      <button id="btnPlaySong" class="ok hidden">Play Song</button>
     </div>
     <div class="pads" id="pads"></div>
     <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -134,8 +170,42 @@
     <div class="row"><label>Limiter</label><input id="limiter" type="range" min="0" max="1" step="0.01" value="0.5"></div>
 
     <h2 style="margin-top:14px">Sequencer</h2>
-    <div id="sequencer" class="seq-grid"></div>
-    <div class="status" style="margin-top:6px">Rows = pads 1-4. Click steps to toggle.</div>
+
+    <div class="seq-section">
+      <div class="bank-selector">
+        <label>Pattern</label>
+        <button class="bank-btn active" data-bank="A">A</button>
+        <button class="bank-btn" data-bank="B">B</button>
+        <button class="bank-btn" data-bank="C">C</button>
+        <button class="bank-btn" data-bank="D">D</button>
+        <button id="btnCopyPattern" style="margin-left:auto;font-size:10px;">Copy</button>
+        <button id="btnPastePattern" style="font-size:10px;">Paste</button>
+        <button id="btnClearPattern" style="font-size:10px;" class="danger">Clear</button>
+      </div>
+      <div id="sequencer" class="seq-grid"></div>
+      <div class="seq-tools">
+        <label>Edit:</label>
+        <button id="btnEditProb" style="font-size:11px;">Probability</button>
+        <button id="btnEditLock" style="font-size:11px;">Param Lock</button>
+        <select id="lockParam" style="font-size:11px;background:#1e2026;color:var(--text);border:1px solid #2a2d35;border-radius:3px;padding:4px;">
+          <option value="wobble">Wobble</option>
+          <option value="bitcrush">Bitcrush</option>
+          <option value="filter">Filter</option>
+          <option value="reverb">Reverb</option>
+          <option value="volume">Volume</option>
+        </select>
+        <span id="editModeLabel" class="status" style="margin-left:auto;"></span>
+      </div>
+    </div>
+
+    <div class="song-section">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <h2 style="margin:0;">Song Mode</h2>
+        <button id="btnToggleSong" style="font-size:11px;">Off</button>
+      </div>
+      <div class="song-chain" id="songChain"></div>
+      <div class="status" style="margin-top:6px">Click slots to set pattern (A/B/C/D/–). Play Song to chain.</div>
+    </div>
   </aside>
 </main>
 
@@ -145,6 +215,7 @@
     <table>
       <tr><td>1 – 8</td><td>Trigger pads 1–8</td></tr>
       <tr><td>Space</td><td>Toggle sequencer</td></tr>
+      <tr><td>R</td><td>Toggle live recording</td></tr>
       <tr><td>?</td><td>Show / hide this overlay</td></tr>
       <tr><td>Drag file</td><td>Load sample onto page</td></tr>
     </table>
@@ -155,7 +226,7 @@
 <script>
 /* ================================================================
    TapeLoop — vanilla JS lo-fi sampler/sequencer + WebGL visualizer
-   v0.4.0 — PWA, IndexedDB, full WAV export, tap tempo, limiter
+   v0.5.0 — Pattern banks, song mode, probability, param locks, live recording
    ================================================================ */
 
 // Service Worker registration
@@ -168,7 +239,7 @@ const $$ = (s) => Array.from(document.querySelectorAll(s));
 
 // IndexedDB helpers
 const DB_NAME = 'TapeLoopDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // bumped for new format
 function openDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
@@ -178,6 +249,7 @@ function openDB() {
       const db = e.target.result;
       if (!db.objectStoreNames.contains('samples')) db.createObjectStore('samples');
       if (!db.objectStoreNames.contains('patterns')) db.createObjectStore('patterns');
+      if (!db.objectStoreNames.contains('songs')) db.createObjectStore('songs');
     };
   });
 }
@@ -214,7 +286,9 @@ let recorderDest, mediaRecorder, recordedChunks = [];
 let isAudioStarted = false;
 let isRecording = false;
 let isPlayingSeq = false;
+let isRecordingSeq = false;
 let currentStep = 0;
+let uiStep = 0;
 let nextNoteTime = 0;
 let timerID = null;
 const STEPS = 16;
@@ -234,8 +308,55 @@ const padNames = [
   "SYN1","SYN2","SYN3","SYN4"
 ];
 
-// Sequencer pattern: 4 rows x 16 steps (first 4 pads)
-let pattern = Array.from({length: 4}, () => new Array(STEPS).fill(false));
+// Pattern banks: A/B/C/D
+const BANKS = ['A', 'B', 'C', 'D'];
+let currentBank = 'A';
+let clipboardPattern = null;
+
+function createEmptyPattern() {
+  return Array.from({length: 4}, () =>
+    Array.from({length: STEPS}, () => ({ active: false, prob: 1.0, locks: {} }))
+  );
+}
+
+function normalizePattern(p) {
+  if (!p || !Array.isArray(p)) return createEmptyPattern();
+  return p.map(row => {
+    if (!Array.isArray(row)) row = new Array(STEPS).fill(false);
+    return row.map(step => {
+      if (typeof step === 'boolean') {
+        return { active: step, prob: 1.0, locks: {} };
+      }
+      if (typeof step !== 'object' || step === null) {
+        return { active: false, prob: 1.0, locks: {} };
+      }
+      return {
+        active: !!step.active,
+        prob: typeof step.prob === 'number' ? step.prob : 1.0,
+        locks: step.locks && typeof step.locks === 'object' ? step.locks : {}
+      };
+    });
+  });
+}
+
+const patterns = {
+  A: createEmptyPattern(),
+  B: createEmptyPattern(),
+  C: createEmptyPattern(),
+  D: createEmptyPattern()
+};
+
+let pattern = patterns.A;
+
+// Song mode
+let songMode = false;
+const SONG_SLOTS = 16;
+let songChain = Array(SONG_SLOTS).fill(null); // null = empty
+let songStep = 0; // which slot in song chain
+
+// Edit modes: null, 'prob', 'lock'
+let editMode = null;
+let lockParam = 'wobble';
 
 // UI: build pads
 const padsEl = $('#pads');
@@ -250,31 +371,197 @@ for (let i = 0; i < PADS; i++) {
 
 // UI: build sequencer grid
 const seqEl = $('#sequencer');
-for (let r = 0; r < 4; r++) {
-  const lbl = document.createElement('div');
-  lbl.className = 'seq-label';
-  lbl.textContent = padNames[r];
-  seqEl.appendChild(lbl);
-  for (let s = 0; s < STEPS; s++) {
-    const step = document.createElement('div');
-    step.className = 'step';
-    step.dataset.row = r;
-    step.dataset.col = s;
-    step.addEventListener('click', () => {
-      pattern[r][s] = !pattern[r][s];
-      step.classList.toggle('on', pattern[r][s]);
-    });
-    seqEl.appendChild(step);
+function buildSequencerGrid() {
+  seqEl.innerHTML = '';
+  for (let r = 0; r < 4; r++) {
+    const lbl = document.createElement('div');
+    lbl.className = 'seq-label';
+    lbl.textContent = padNames[r];
+    seqEl.appendChild(lbl);
+    for (let s = 0; s < STEPS; s++) {
+      const step = document.createElement('div');
+      step.className = 'step';
+      step.dataset.row = r;
+      step.dataset.col = s;
+      step.addEventListener('click', (e) => onStepClick(r, s, e));
+      step.addEventListener('contextmenu', (e) => { e.preventDefault(); onStepRightClick(r, s); });
+      seqEl.appendChild(step);
+    }
   }
+  updateStepUI();
 }
+buildSequencerGrid();
 
 function updateStepUI() {
-  $$('.step').forEach(el => el.classList.remove('current'));
+  $$('.step').forEach(el => {
+    const r = +el.dataset.row;
+    const c = +el.dataset.col;
+    const stepData = pattern[r][c];
+    el.classList.toggle('on', stepData.active);
+    el.classList.toggle('prob-75', stepData.prob === 0.75);
+    el.classList.toggle('prob-50', stepData.prob === 0.5);
+    el.classList.toggle('prob-25', stepData.prob === 0.25);
+    el.classList.toggle('locked', Object.keys(stepData.locks).length > 0);
+  });
+  $$('.step.current').forEach(el => el.classList.remove('current'));
   for (let r = 0; r < 4; r++) {
-    const el = seqEl.querySelector(`.step[data-row="${r}"][data-col="${currentStep}"]`);
+    const el = seqEl.querySelector(`.step[data-row="${r}"][data-col="${uiStep}"]`);
     if (el) el.classList.add('current');
   }
 }
+
+function onStepClick(row, col, e) {
+  if (editMode === 'prob') {
+    // Cycle probability: 1.0 -> 0.75 -> 0.5 -> 0.25 -> 0 -> 1.0
+    const probs = [1.0, 0.75, 0.5, 0.25, 0];
+    const current = pattern[row][col].prob;
+    const idx = probs.indexOf(current);
+    const nextIdx = (idx + 1) % probs.length;
+    pattern[row][col].prob = probs[nextIdx];
+    if (probs[nextIdx] === 0) pattern[row][col].active = false;
+    else pattern[row][col].active = true;
+  } else if (editMode === 'lock') {
+    const param = $('#lockParam').value;
+    const val = parseFloat($('#' + param).value);
+    const stepData = pattern[row][col];
+    if (stepData.locks[param] !== undefined) {
+      delete stepData.locks[param];
+    } else {
+      stepData.locks[param] = val;
+    }
+    // Ensure step is active if it has locks
+    if (Object.keys(stepData.locks).length > 0 && !stepData.active) {
+      stepData.active = true;
+      stepData.prob = 1.0;
+    }
+  } else {
+    pattern[row][col].active = !pattern[row][col].active;
+    if (!pattern[row][col].active) {
+      pattern[row][col].prob = 1.0;
+      pattern[row][col].locks = {};
+    }
+  }
+  updateStepUI();
+}
+
+function onStepRightClick(row, col) {
+  // Quick clear locks
+  pattern[row][col].locks = {};
+  updateStepUI();
+}
+
+// Bank switching
+function switchBank(bank) {
+  currentBank = bank;
+  if (!songMode || !isPlayingSeq) {
+    pattern = patterns[bank];
+  }
+  $$('.bank-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.bank === bank);
+  });
+  updateStepUI();
+}
+
+$$('.bank-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchBank(btn.dataset.bank));
+});
+
+// Pattern copy/paste/clear
+$('#btnCopyPattern').addEventListener('click', () => {
+  clipboardPattern = JSON.parse(JSON.stringify(pattern));
+  $('#status').textContent = `Pattern ${currentBank} copied`;
+});
+
+$('#btnPastePattern').addEventListener('click', () => {
+  if (!clipboardPattern) return;
+  patterns[currentBank] = JSON.parse(JSON.stringify(clipboardPattern));
+  pattern = patterns[currentBank];
+  updateStepUI();
+  $('#status').textContent = `Pattern pasted to ${currentBank}`;
+});
+
+$('#btnClearPattern').addEventListener('click', () => {
+  patterns[currentBank] = createEmptyPattern();
+  pattern = patterns[currentBank];
+  updateStepUI();
+  $('#status').textContent = `Pattern ${currentBank} cleared`;
+});
+
+// Edit mode toggles
+$('#btnEditProb').addEventListener('click', () => {
+  editMode = editMode === 'prob' ? null : 'prob';
+  updateEditModeUI();
+});
+
+$('#btnEditLock').addEventListener('click', () => {
+  editMode = editMode === 'lock' ? null : 'lock';
+  updateEditModeUI();
+});
+
+$('#lockParam').addEventListener('change', (e) => {
+  lockParam = e.target.value;
+  if (editMode === 'lock') updateEditModeUI();
+});
+
+function updateEditModeUI() {
+  $('#btnEditProb').classList.toggle('active', editMode === 'prob');
+  $('#btnEditLock').classList.toggle('active', editMode === 'lock');
+  const label = editMode === 'prob' ? 'Probability mode: click steps to cycle (100%->75%->50%->25%->0%)' :
+                editMode === 'lock' ? `Lock mode: click steps to toggle ${lockParam} lock` :
+                '';
+  $('#editModeLabel').textContent = label;
+}
+
+// Song mode
+const songChainEl = $('#songChain');
+function buildSongChain() {
+  songChainEl.innerHTML = '';
+  for (let i = 0; i < SONG_SLOTS; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'song-slot empty';
+    slot.dataset.idx = i;
+    slot.textContent = '–';
+    slot.addEventListener('click', () => {
+      const order = [null, 'A', 'B', 'C', 'D'];
+      const current = songChain[i];
+      const idx = order.indexOf(current);
+      const next = order[(idx + 1) % order.length];
+      songChain[i] = next;
+      slot.textContent = next || '–';
+      slot.classList.toggle('empty', !next);
+      slot.classList.toggle('active', i === songStep && songMode && next);
+    });
+    songChainEl.appendChild(slot);
+  }
+}
+buildSongChain();
+
+function updateSongUI() {
+  $$('.song-slot').forEach((slot, i) => {
+    slot.classList.toggle('active', i === songStep && songMode && songChain[i]);
+  });
+}
+
+$('#btnToggleSong').addEventListener('click', () => {
+  songMode = !songMode;
+  $('#btnToggleSong').textContent = songMode ? 'On' : 'Off';
+  $('#btnToggleSong').classList.toggle('active', songMode);
+  $('#btnPlaySeq').classList.toggle('hidden', songMode);
+  $('#btnPlaySong').classList.toggle('hidden', !songMode);
+  if (!songMode && !isPlayingSeq) {
+    pattern = patterns[currentBank];
+  }
+  updateSongUI();
+});
+
+// Live recording
+$('#btnRecSeq').addEventListener('click', () => {
+  if (!isAudioStarted) initAudio();
+  isRecordingSeq = !isRecordingSeq;
+  $('#btnRecSeq').classList.toggle('active', isRecordingSeq);
+  $('#btnRecSeq').textContent = isRecordingSeq ? 'Stop Rec' : 'Rec Seq';
+  $('#status').textContent = isRecordingSeq ? 'Recording to sequencer...' : 'Recording stopped';
+});
 
 function initAudio() {
   if (isAudioStarted) return;
@@ -342,13 +629,6 @@ function initAudio() {
   };
   setReverb(1.5, 2.0, false);
 
-  // Chain: master -> filter -> bitcrusher -> wobble(delay) -> convolver -> destination
-  masterGain.connect(filterNode);
-  filterNode.connect(bitcrusherNode);
-  bitcrusherNode.connect(wobbleNode);
-  wobbleNode.connect(convolver);
-  convolver.connect(audioCtx.destination);
-
   // Wet/dry reverb gain
   const reverbWet = audioCtx.createGain();
   reverbWet.gain.value = 0;
@@ -362,8 +642,11 @@ function initAudio() {
   limiterNode.attack.value = 0.003;
   limiterNode.release.value = 0.1;
 
-  // Rebuild chain: master -> filter -> bitcrusher -> wobble -> convolver -> limiter -> destination
-  convolver.disconnect();
+  // Chain: master -> filter -> bitcrusher -> wobble(delay) -> convolver -> wet -> limiter -> destination
+  masterGain.connect(filterNode);
+  filterNode.connect(bitcrusherNode);
+  bitcrusherNode.connect(wobbleNode);
+  wobbleNode.connect(convolver);
   convolver.connect(reverbWet);
   reverbWet.connect(limiterNode);
   limiterNode.connect(audioCtx.destination);
@@ -385,6 +668,14 @@ function triggerPad(index, when = null) {
   src.buffer = buf;
   src.connect(masterGain);
   src.start(t);
+
+  // Live recording
+  if (isRecordingSeq && isPlayingSeq && index < 4) {
+    pattern[index][uiStep].active = true;
+    pattern[index][uiStep].prob = 1.0;
+    updateStepUI();
+  }
+
   // Visual feedback
   const pad = padsEl.children[index];
   pad.classList.add('playing');
@@ -407,7 +698,15 @@ $('#fileInput').addEventListener('change', async (e) => {
 $('#btnStart').addEventListener('click', () => { initAudio(); audioCtx.resume(); });
 $('#btnStop').addEventListener('click', () => {
   if (audioCtx) audioCtx.suspend();
-  isPlayingSeq = false; clearTimeout(timerID);
+  isPlayingSeq = false; isRecordingSeq = false;
+  clearTimeout(timerID);
+  $('#btnPlaySeq').textContent = 'Play Seq';
+  $('#btnPlaySong').textContent = 'Play Song';
+  $('#btnRecSeq').classList.remove('active');
+  $('#btnRecSeq').textContent = 'Rec Seq';
+  pattern = patterns[currentBank];
+  uiStep = 0;
+  updateStepUI();
   $('#status').textContent = 'Stopped';
 });
 
@@ -440,9 +739,33 @@ $('#bpm').addEventListener('input', (e) => { bpm = Math.max(40, Math.min(200, +e
 
 $('#btnPlaySeq').addEventListener('click', () => {
   if (!isAudioStarted) initAudio();
-  if (isPlayingSeq) { isPlayingSeq = false; clearTimeout(timerID); $('#btnPlaySeq').textContent = 'Play Seq'; return; }
-  isPlayingSeq = true; currentStep = 0; nextNoteTime = audioCtx.currentTime + 0.05;
+  if (isPlayingSeq) {
+    isPlayingSeq = false; clearTimeout(timerID);
+    $('#btnPlaySeq').textContent = 'Play Seq';
+    return;
+  }
+  isPlayingSeq = true; currentStep = 0; uiStep = 0; nextNoteTime = audioCtx.currentTime + 0.05;
+  pattern = patterns[currentBank];
   $('#btnPlaySeq').textContent = 'Stop Seq';
+  scheduler();
+});
+
+$('#btnPlaySong').addEventListener('click', () => {
+  if (!isAudioStarted) initAudio();
+  if (isPlayingSeq) {
+    isPlayingSeq = false; clearTimeout(timerID);
+    $('#btnPlaySong').textContent = 'Play Song';
+    return;
+  }
+  isPlayingSeq = true; currentStep = 0; uiStep = 0; songStep = 0; nextNoteTime = audioCtx.currentTime + 0.05;
+  // Find first non-empty slot
+  let startSlot = 0;
+  while (startSlot < SONG_SLOTS && !songChain[startSlot]) startSlot++;
+  if (startSlot < SONG_SLOTS) {
+    songStep = startSlot;
+    pattern = patterns[songChain[songStep]];
+  }
+  $('#btnPlaySong').textContent = 'Stop Song';
   scheduler();
 });
 
@@ -450,18 +773,63 @@ function scheduler() {
   while (nextNoteTime < audioCtx.currentTime + scheduleAheadTime) {
     scheduleNote(currentStep, nextNoteTime);
     nextNoteTime += (60.0 / bpm) / 4; // 16th notes
-    currentStep = (currentStep + 1) % STEPS;
+    currentStep++;
+
+    if (currentStep >= STEPS) {
+      currentStep = 0;
+      if (songMode && isPlayingSeq) {
+        // Advance song
+        let nextSongStep = (songStep + 1) % SONG_SLOTS;
+        let loopCount = 0;
+        while (!songChain[nextSongStep] && loopCount < SONG_SLOTS) {
+          nextSongStep = (nextSongStep + 1) % SONG_SLOTS;
+          loopCount++;
+        }
+        if (songChain[nextSongStep]) {
+          songStep = nextSongStep;
+          pattern = patterns[songChain[songStep]];
+        }
+        updateSongUI();
+      }
+    }
   }
   if (isPlayingSeq) timerID = setTimeout(scheduler, lookahead);
 }
 
 function scheduleNote(step, time) {
   for (let r = 0; r < 4; r++) {
-    if (pattern[r][step]) triggerPad(r, time);
+    const stepData = pattern[r][step];
+    if (stepData.active && Math.random() < stepData.prob) {
+      // Apply parameter locks before triggering
+      if (stepData.locks.wobble !== undefined && wobbleLFO) {
+        wobbleLFO.frequency.setValueAtTime(stepData.locks.wobble * 5, time);
+      }
+      if (stepData.locks.bitcrush !== undefined && bitcrusherNode) {
+        const v = stepData.locks.bitcrush;
+        bitcrusherNode.bits = v < 0.01 ? 16 : Math.max(2, 16 - Math.floor(v * 14));
+        bitcrusherNode.normFreq = v < 0.01 ? 1 : Math.max(0.02, 1 - v * 0.98);
+      }
+      if (stepData.locks.filter !== undefined && filterNode) {
+        filterNode.frequency.setValueAtTime(stepData.locks.filter, time);
+      }
+      if (stepData.locks.reverb !== undefined && window._reverbWet) {
+        window._reverbWet.gain.setValueAtTime(stepData.locks.reverb, time);
+      }
+      if (stepData.locks.volume !== undefined && masterGain) {
+        masterGain.gain.setValueAtTime(stepData.locks.volume, time);
+      }
+
+      triggerPad(r, time);
+    }
   }
   // Update UI on main thread near time
   const dt = Math.max(0, (time - audioCtx.currentTime) * 1000);
-  setTimeout(() => { if (isPlayingSeq) updateStepUI(); }, dt);
+  setTimeout(() => {
+    if (isPlayingSeq) {
+      uiStep = step;
+      updateStepUI();
+    }
+  }, dt);
 }
 
 // Effects bindings
@@ -489,9 +857,7 @@ $('#masterVol').addEventListener('input', (e) => {
   if (masterGain) masterGain.gain.setTargetAtTime(v, audioCtx.currentTime, 0.02);
 });
 
-
-
-// Export mix (same as record then download)
+// Export mix
 $('#btnExport').addEventListener('click', () => {
   if (!isAudioStarted) { alert('Start audio first'); return; }
   $('#btnRec').click();
@@ -533,9 +899,13 @@ async function exportWAV() {
   // Render sequence
   const stepTime = (60.0 / bpm) / 4;
   let step = 0;
+  let bankPattern = pattern;
+  let songSlot = 0;
+
   for (let t = 0; t < duration; t += stepTime) {
     for (let r = 0; r < 4; r++) {
-      if (pattern[r][step]) {
+      const stepData = bankPattern[r][step];
+      if (stepData.active && Math.random() < stepData.prob) {
         const buf = buffers[r];
         if (buf) {
           const src = offlineCtx.createBufferSource();
@@ -545,7 +915,22 @@ async function exportWAV() {
         }
       }
     }
-    step = (step + 1) % STEPS;
+    step++;
+    if (step >= STEPS) {
+      step = 0;
+      if (songMode) {
+        let nextSlot = (songSlot + 1) % SONG_SLOTS;
+        let loopCount = 0;
+        while (!songChain[nextSlot] && loopCount < SONG_SLOTS) {
+          nextSlot = (nextSlot + 1) % SONG_SLOTS;
+          loopCount++;
+        }
+        if (songChain[nextSlot]) {
+          songSlot = nextSlot;
+          bankPattern = patterns[songChain[songSlot]];
+        }
+      }
+    }
   }
 
   const rendered = await offlineCtx.startRendering();
@@ -625,7 +1010,8 @@ $('#btnSave').addEventListener('click', async () => {
         await dbDelete('samples', 'pad_' + i);
       }
     }
-    await dbPut('patterns', 'default', JSON.stringify(pattern));
+    await dbPut('patterns', 'banks', JSON.stringify(patterns));
+    await dbPut('songs', 'default', JSON.stringify(songChain));
     $('#status').textContent = 'Set saved to browser';
   } catch (err) { $('#status').textContent = 'Save failed'; }
 });
@@ -633,12 +1019,32 @@ $('#btnSave').addEventListener('click', async () => {
 $('#btnLoad').addEventListener('click', async () => {
   try {
     if (!isAudioStarted) initAudio();
-    const savedPattern = await dbGet('patterns', 'default');
-    if (savedPattern) {
-      pattern = JSON.parse(savedPattern);
-      $$('.step').forEach(el => {
-        const r = +el.dataset.row, c = +el.dataset.col;
-        el.classList.toggle('on', pattern[r][c]);
+    const savedPatterns = await dbGet('patterns', 'banks');
+    if (savedPatterns) {
+      const parsed = JSON.parse(savedPatterns);
+      for (const bank of BANKS) {
+        if (parsed[bank]) {
+          patterns[bank] = normalizePattern(parsed[bank]);
+        }
+      }
+      pattern = patterns[currentBank];
+      updateStepUI();
+    } else {
+      // Try old format
+      const oldPattern = await dbGet('patterns', 'default');
+      if (oldPattern) {
+        const old = JSON.parse(oldPattern);
+        patterns.A = normalizePattern(old);
+        pattern = patterns[currentBank];
+        updateStepUI();
+      }
+    }
+    const savedSong = await dbGet('songs', 'default');
+    if (savedSong) {
+      songChain = JSON.parse(savedSong);
+      $$('.song-slot').forEach((slot, i) => {
+        slot.textContent = songChain[i] || '–';
+        slot.classList.toggle('empty', !songChain[i]);
       });
     }
     for (let i = 0; i < PADS; i++) {
@@ -674,6 +1080,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === '?') { e.preventDefault(); shortcutOverlay.classList.toggle('active'); }
   if (e.key >= '1' && e.key <= '8') triggerPad(+e.key - 1);
   if (e.key === ' ') { e.preventDefault(); $('#btnPlaySeq').click(); }
+  if (e.key === 'r' || e.key === 'R') { e.preventDefault(); $('#btnRecSeq').click(); }
 });
 $('#btnCloseOverlay').addEventListener('click', () => shortcutOverlay.classList.remove('active'));
 shortcutOverlay.addEventListener('click', (e) => { if (e.target === shortcutOverlay) shortcutOverlay.classList.remove('active'); });
