@@ -41,7 +41,9 @@
     main { grid-template-columns: 1fr; }
   }
 
-  /* Mobile Layout Optimization */
+  /* ============================================
+     Mobile Layout Optimization v0.7.0
+     ============================================ */
   @media (max-width: 768px) {
     html { -webkit-text-size-adjust: 100%; }
     body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
@@ -101,6 +103,23 @@
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
     }
+
+    /* Touch-optimized pad sizes */
+    .pad {
+      min-height: 80px;
+      font-size: 13px;
+    }
+
+    /* Larger touch targets for controls */
+    input[type="range"] {
+      height: 44px;
+    }
+
+    /* Prevent text selection during gestures */
+    .pads, .seq-grid, .song-chain, .transport {
+      -webkit-user-select: none;
+      user-select: none;
+    }
   }
 
   @media (max-width: 480px) {
@@ -109,6 +128,12 @@
     .seq-grid { min-width: 480px; }
     .seq-grid .step { height: 28px; }
     .song-slot { width: 28px; height: 32px; }
+    .pad { min-height: 72px; }
+  }
+
+  /* Tablet optimization: 4-column pads */
+  @media (min-width: 481px) and (max-width: 768px) {
+    .pads { grid-template-columns: repeat(4, 1fr); }
   }
 
   /* Touch-friendly enhancements */
@@ -228,6 +253,13 @@
     padding: 4px; font-family: inherit; font-size: 12px; width: 60px;
   }
   .pad-edit .row { margin-bottom: 6px; }
+
+  /* Latency display */
+  #latencyInfo {
+    font-size: 10px;
+    color: var(--muted);
+    margin-left: auto;
+  }
 </style>
 </head>
 <body>
@@ -235,6 +267,7 @@
   <h1>TapeLoop</h1>
   <span class="badge">Lo-Fi Sampler / Sequencer — v0.7.0</span>
   <span id="status" class="status" style="margin-left:auto">Click Start Audio</span>
+  <span id="latencyInfo" class="hidden"></span>
 </header>
 <canvas id="viz"></canvas>
 <main>
@@ -359,17 +392,19 @@
    ================================================================ */
 
 import {
-  STEPS, PADS, BANKS,
-  createEmptyPattern, normalizePattern,
-  cycleProbability, toggleStep,
-  createEmptySong, nextSongStep,
-  calculateBPMFromIntervals, scheduleAheadTimeMs
-} from './src/patterns.js';
-
-import {
-  bufferToWav, fft, ifft, autoSlice,
-  calculatePitchRate, bitcrushParams, limiterThreshold
-} from './src/audio-utils.js';
+  STEPS, PADS, BANKS, SONG_SLOTS, padNames,
+  createEmptyPattern, normalizePattern, createDefaultPadSettings,
+  createDefaultPatterns, createEmptySongChain,
+  autoSlice, phaseVocoder, bufferToWav,
+  calculateLatencyCompensation, measureLatencyFallback,
+  calculateBpmFromTaps, detectSwipeDirection,
+  PROBABILITIES, cycleProbability,
+  getNextSongStep, getFirstSongStep,
+  calculatePlaybackRate, calculateBitcrushParams,
+  copyPattern, clearPattern,
+  serializePatterns, deserializePatterns, serializePadSettings,
+  openDB, dbPut, dbGet, dbDelete
+} from './src/core.js';
 
 // Service Worker registration
 if ('serviceWorker' in navigator) {
@@ -378,50 +413,6 @@ if ('serviceWorker' in navigator) {
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
-
-// IndexedDB helpers
-const DB_NAME = 'TapeLoopDB';
-const DB_VERSION = 2; // bumped for new format
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => resolve(req.result);
-    req.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains('samples')) db.createObjectStore('samples');
-      if (!db.objectStoreNames.contains('patterns')) db.createObjectStore('patterns');
-      if (!db.objectStoreNames.contains('songs')) db.createObjectStore('songs');
-    };
-  });
-}
-async function dbPut(store, key, value) {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, 'readwrite');
-    const req = tx.objectStore(store).put(value, key);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-  });
-}
-async function dbGet(store, key) {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, 'readonly');
-    const req = tx.objectStore(store).get(key);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-async function dbDelete(store, key) {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, 'readwrite');
-    const req = tx.objectStore(store).delete(key);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-  });
-}
 
 let audioCtx, masterGain, convolver, filterNode, bitcrusherNode, wobbleNode, wobbleLFO, limiterNode;
 let recorderDest, mediaRecorder, recordedChunks = [];
@@ -433,8 +424,6 @@ let currentStep = 0;
 let uiStep = 0;
 let nextNoteTime = 0;
 let timerID = null;
-const STEPS = 16;
-const PADS = 16;
 let bpm = 90;
 let lookahead = 25.0; // ms
 let scheduleAheadTime = 0.1; // s
@@ -443,79 +432,41 @@ let scheduleAheadTime = 0.1; // s
 let tapTimes = [];
 
 const buffers = new Array(PADS).fill(null);
-const padNames = [
-  "KICK","SNARE","CLAP","HAT",
-  "BASS","KEYS","PAD","FX",
-  "PERC","VOX","BELL","NOISE",
-  "SYN1","SYN2","SYN3","SYN4"
-];
 
-// Pad settings: pitch, slices, stretch, chop
-const padSettings = Array.from({length: PADS}, () => ({
-  pitchSemitones: 0,
-  pitchFine: 0,
-  slices: [],
-  stretchedBuffer: null,
-  stretchRatio: 1,
-  chopMode: false
-}));
+// Pad settings
+const padSettings = Array.from({length: PADS}, () => createDefaultPadSettings());
 let selectedPad = -1;
 
-// Pattern banks: A/B/C/D
-const BANKS = ['A', 'B', 'C', 'D'];
+// Pattern banks
 let currentBank = 'A';
 let clipboardPattern = null;
 
-function createEmptyPattern() {
-  return Array.from({length: 4}, () =>
-    Array.from({length: STEPS}, () => ({ active: false, prob: 1.0, locks: {} }))
-  );
-}
-
-function normalizePattern(p) {
-  if (!p || !Array.isArray(p)) return createEmptyPattern();
-  return p.map(row => {
-    if (!Array.isArray(row)) row = new Array(STEPS).fill(false);
-    return row.map(step => {
-      if (typeof step === 'boolean') {
-        return { active: step, prob: 1.0, locks: {} };
-      }
-      if (typeof step !== 'object' || step === null) {
-        return { active: false, prob: 1.0, locks: {} };
-      }
-      return {
-        active: !!step.active,
-        prob: typeof step.prob === 'number' ? step.prob : 1.0,
-        locks: step.locks && typeof step.locks === 'object' ? step.locks : {}
-      };
-    });
-  });
-}
-
-const patterns = {
-  A: createEmptyPattern(),
-  B: createEmptyPattern(),
-  C: createEmptyPattern(),
-  D: createEmptyPattern()
-};
-
+const patterns = createDefaultPatterns();
 let pattern = patterns.A;
 
 // Song mode
 let songMode = false;
-const SONG_SLOTS = 16;
-let songChain = Array(SONG_SLOTS).fill(null); // null = empty
-let songStep = 0; // which slot in song chain
+let songChain = createEmptySongChain();
+let songStep = 0;
 
 // Audio latency measurement and compensation
 let measuredLatency = 0;
 let baseLatency = 0;
 let outputLatency = 0;
 let latencyCompensation = 0;
+let latencyMeasured = false;
 
-// Edit modes: null, 'prob', 'lock'
+// Edit modes
 let editMode = null;
 let lockParam = 'wobble';
+
+// Touch gesture state
+const activeTouches = new Map();
+let touchStartPos = null;
+let touchStartTime = 0;
+let longPressTimer = null;
+const LONG_PRESS_DURATION = 500;
+const SWIPE_THRESHOLD = 30;
 
 // UI: build pads
 const padsEl = $('#pads');
@@ -542,29 +493,48 @@ function selectPad(index) {
   updatePadEditUI();
 }
 
-// Touch gesture support for pads
-const activeTouches = new Map();
+// ============================================
+// Touch Gesture Support v0.7.0
+// ============================================
 
 function handleTouchStart(e) {
   e.preventDefault();
   const pad = e.currentTarget;
   const idx = +pad.dataset.idx;
+
   for (const touch of e.changedTouches) {
-    activeTouches.set(touch.identifier, idx);
+    activeTouches.set(touch.identifier, {
+      padIndex: idx,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      startTime: Date.now()
+    });
+
     pad.classList.add('playing');
     triggerPad(idx);
     selectPad(idx);
+
+    // Long press detection for pad options
+    longPressTimer = setTimeout(() => {
+      if (activeTouches.has(touch.identifier)) {
+        // Show pad context menu or activate special mode
+        pad.classList.add('selected');
+      }
+    }, LONG_PRESS_DURATION);
   }
 }
 
 function handleTouchEnd(e) {
   e.preventDefault();
   const pad = e.currentTarget;
+
   for (const touch of e.changedTouches) {
-    const idx = activeTouches.get(touch.identifier);
-    if (idx !== undefined) {
+    const touchData = activeTouches.get(touch.identifier);
+    if (touchData !== undefined) {
       activeTouches.delete(touch.identifier);
-      const p = padsEl.children[idx];
+      clearTimeout(longPressTimer);
+
+      const p = padsEl.children[touchData.padIndex];
       if (p) p.classList.remove('playing');
     }
   }
@@ -572,16 +542,42 @@ function handleTouchEnd(e) {
 
 function handleTouchMove(e) {
   e.preventDefault();
-  // Optional: swipe detection for pad navigation
-  const pad = e.currentTarget;
-  const idx = +pad.dataset.idx;
+
   for (const touch of e.changedTouches) {
+    const touchData = activeTouches.get(touch.identifier);
+    if (!touchData) continue;
+
+    const dx = touch.clientX - touchData.startX;
+    const dy = touch.clientY - touchData.startY;
+
+    // Cancel long press if moved significantly
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+      clearTimeout(longPressTimer);
+    }
+
+    // Detect swipe gestures
+    const direction = detectSwipeDirection(
+      { clientX: touchData.startX, clientY: touchData.startY },
+      { clientX: touch.clientX, clientY: touch.clientY },
+      SWIPE_THRESHOLD
+    );
+
+    if (direction) {
+      handlePadSwipe(touchData.padIndex, direction);
+      activeTouches.delete(touch.identifier);
+      const p = padsEl.children[touchData.padIndex];
+      if (p) p.classList.remove('playing');
+      continue;
+    }
+
+    // Handle sliding between pads
     const el = document.elementFromPoint(touch.clientX, touch.clientY);
     if (el && el.classList.contains('pad')) {
       const newIdx = +el.dataset.idx;
-      if (newIdx !== idx && activeTouches.get(touch.identifier) === idx) {
-        activeTouches.set(touch.identifier, newIdx);
-        pad.classList.remove('playing');
+      if (newIdx !== touchData.padIndex) {
+        activeTouches.set(touch.identifier, { ...touchData, padIndex: newIdx });
+        const oldPad = padsEl.children[touchData.padIndex];
+        if (oldPad) oldPad.classList.remove('playing');
         el.classList.add('playing');
         triggerPad(newIdx);
         selectPad(newIdx);
@@ -590,14 +586,74 @@ function handleTouchMove(e) {
   }
 }
 
+function handlePadSwipe(padIndex, direction) {
+  // Swipe up/down to adjust pitch
+  if (direction === 'up') {
+    padSettings[padIndex].pitchSemitones = Math.min(24, padSettings[padIndex].pitchSemitones + 1);
+    updatePadEditUI();
+  } else if (direction === 'down') {
+    padSettings[padIndex].pitchSemitones = Math.max(-24, padSettings[padIndex].pitchSemitones - 1);
+    updatePadEditUI();
+  }
+}
+
+// Attach touch events to pads container with delegation
 padsEl.addEventListener('touchstart', (e) => {
-  if (e.target.closest('.pad')) handleTouchStart({ preventDefault: () => e.preventDefault(), changedTouches: e.changedTouches, currentTarget: e.target.closest('.pad') });
+  const pad = e.target.closest('.pad');
+  if (pad) handleTouchStart({ preventDefault: () => e.preventDefault(), changedTouches: e.changedTouches, currentTarget: pad });
 }, { passive: false });
+
 padsEl.addEventListener('touchend', (e) => {
-  if (e.target.closest('.pad')) handleTouchEnd({ preventDefault: () => e.preventDefault(), changedTouches: e.changedTouches, currentTarget: e.target.closest('.pad') });
+  const pad = e.target.closest('.pad');
+  if (pad) handleTouchEnd({ preventDefault: () => e.preventDefault(), changedTouches: e.changedTouches, currentTarget: pad });
 }, { passive: false });
+
 padsEl.addEventListener('touchmove', (e) => {
-  if (e.target.closest('.pad')) handleTouchMove({ preventDefault: () => e.preventDefault(), changedTouches: e.changedTouches, currentTarget: e.target.closest('.pad') });
+  const pad = e.target.closest('.pad');
+  if (pad) handleTouchMove({ preventDefault: () => e.preventDefault(), changedTouches: e.changedTouches, currentTarget: pad });
+}, { passive: false });
+
+// Touch gestures for sequencer
+let seqTouchStart = null;
+const seqEl = $('#sequencer');
+
+seqEl.addEventListener('touchstart', (e) => {
+  if (e.changedTouches.length === 1) {
+    seqTouchStart = {
+      x: e.changedTouches[0].clientX,
+      y: e.changedTouches[0].clientY,
+      time: Date.now()
+    };
+  }
+}, { passive: true });
+
+seqEl.addEventListener('touchmove', (e) => {
+  if (!seqTouchStart) return;
+  const dx = e.changedTouches[0].clientX - seqTouchStart.x;
+  // Allow horizontal scroll for sequencer
+  if (Math.abs(dx) > 10) {
+    seqTouchStart = null;
+  }
+}, { passive: true });
+
+seqEl.addEventListener('touchend', (e) => {
+  if (!seqTouchStart) return;
+  const dx = e.changedTouches[0].clientX - seqTouchStart.x;
+  const dy = e.changedTouches[0].clientY - seqTouchStart.y;
+  const dt = Date.now() - seqTouchStart.time;
+
+  // Detect swipe on sequencer for pattern switching
+  if (Math.abs(dx) > 50 && dt < 300) {
+    e.preventDefault();
+    const banks = ['A', 'B', 'C', 'D'];
+    const currentIdx = banks.indexOf(currentBank);
+    if (dx < 0 && currentIdx < banks.length - 1) {
+      switchBank(banks[currentIdx + 1]);
+    } else if (dx > 0 && currentIdx > 0) {
+      switchBank(banks[currentIdx - 1]);
+    }
+  }
+  seqTouchStart = null;
 }, { passive: false });
 
 function updatePadEditUI() {
@@ -618,181 +674,7 @@ function updatePadEditUI() {
   $('#stretchStatus').textContent = s.stretchedBuffer ? `Stretched (${s.stretchRatio.toFixed(2)}x)` : 'Original';
 }
 
-// Auto-slice into equal segments
-function autoSlice(index, numSlices) {
-  const buf = buffers[index];
-  if (!buf) return;
-  const len = buf.length;
-  const sliceSize = Math.floor(len / numSlices);
-  const slices = [];
-  for (let i = 0; i < numSlices; i++) {
-    slices.push({
-      start: i * sliceSize,
-      end: (i === numSlices - 1) ? len : (i + 1) * sliceSize
-    });
-  }
-  padSettings[index].slices = slices;
-  updatePadEditUI();
-}
-
-// Phase vocoder time-stretch
-function fft(real, imag) {
-  const n = real.length;
-  for (let i = 1, j = 0; i < n; i++) {
-    let bit = n >> 1;
-    for (; j & bit; bit >>= 1) j ^= bit;
-    j ^= bit;
-    if (i < j) {
-      [real[i], real[j]] = [real[j], real[i]];
-      [imag[i], imag[j]] = [imag[j], imag[i]];
-    }
-  }
-  for (let len = 2; len <= n; len <<= 1) {
-    const ang = -2 * Math.PI / len;
-    const wlen_cos = Math.cos(ang), wlen_sin = Math.sin(ang);
-    for (let i = 0; i < n; i += len) {
-      let w_real = 1, w_imag = 0;
-      for (let j = 0; j < len / 2; j++) {
-        const u_real = real[i+j], u_imag = imag[i+j];
-        const v_real = real[i+j+len/2] * w_real - imag[i+j+len/2] * w_imag;
-        const v_imag = real[i+j+len/2] * w_imag + imag[i+j+len/2] * w_real;
-        real[i+j] = u_real + v_real;
-        imag[i+j] = u_imag + v_imag;
-        real[i+j+len/2] = u_real - v_real;
-        imag[i+j+len/2] = u_imag - v_imag;
-        const next_w_real = w_real * wlen_cos - w_imag * wlen_sin;
-        w_imag = w_real * wlen_sin + w_imag * wlen_cos;
-        w_real = next_w_real;
-      }
-    }
-  }
-}
-
-function ifft(real, imag) {
-  const n = real.length;
-  fft(imag, real);
-  for (let i = 0; i < n; i++) {
-    real[i] /= n;
-    imag[i] /= n;
-  }
-}
-
-function phaseVocoder(inputBuffer, ratio) {
-  const sr = inputBuffer.sampleRate;
-  const ch = inputBuffer.numberOfChannels;
-  const len = inputBuffer.length;
-
-  // Mono mixdown for processing
-  const input = new Float32Array(len);
-  for (let i = 0; i < len; i++) {
-    let s = 0;
-    for (let c = 0; c < ch; c++) s += inputBuffer.getChannelData(c)[i];
-    input[i] = s / ch;
-  }
-
-  const W = 2048;
-  const H = 512;
-  const outputLen = Math.max(1, Math.floor(len * ratio));
-  const out = new Float32Array(outputLen);
-
-  const hann = new Float32Array(W);
-  for (let i = 0; i < W; i++) hann[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (W - 1));
-
-  const numFrames = Math.max(1, Math.floor((len - W) / H) + 1);
-
-  // Analyze
-  const frames = [];
-  for (let f = 0; f < numFrames; f++) {
-    const real = new Float32Array(W);
-    const imag = new Float32Array(W);
-    const off = f * H;
-    for (let i = 0; i < W; i++) {
-      if (off + i < len) real[i] = input[off + i] * hann[i];
-    }
-    fft(real, imag);
-    const mags = new Float32Array(W);
-    const phases = new Float32Array(W);
-    for (let i = 0; i < W; i++) {
-      mags[i] = Math.sqrt(real[i]*real[i] + imag[i]*imag[i]);
-      phases[i] = Math.atan2(imag[i], real[i]);
-    }
-    frames.push({ mags, phases });
-  }
-
-  // Synthesize
-  const outPhases = new Float32Array(W);
-  let prevAnaPhases = new Float32Array(W);
-  const omega = new Float32Array(W);
-  for (let i = 0; i < W; i++) omega[i] = 2 * Math.PI * H * i / W;
-
-  const numSynthFrames = Math.max(1, Math.floor((outputLen - W) / H) + 1);
-
-  for (let sf = 0; sf < numSynthFrames; sf++) {
-    const af = sf / ratio;
-    const f0 = Math.floor(af);
-    const frac = af - f0;
-
-    const mags = new Float32Array(W);
-    const phases = new Float32Array(W);
-
-    if (f0 >= 0 && f0 + 1 < numFrames) {
-      for (let i = 0; i < W; i++) {
-        mags[i] = frames[f0].mags[i] * (1 - frac) + frames[f0+1].mags[i] * frac;
-        phases[i] = frames[f0].phases[i] * (1 - frac) + frames[f0+1].phases[i] * frac;
-      }
-    } else if (f0 >= 0 && f0 < numFrames) {
-      for (let i = 0; i < W; i++) {
-        mags[i] = frames[f0].mags[i];
-        phases[i] = frames[f0].phases[i];
-      }
-    } else {
-      continue;
-    }
-
-    // Phase vocoder propagation
-    for (let i = 0; i < W; i++) {
-      let delta = phases[i] - prevAnaPhases[i];
-      delta -= omega[i];
-      while (delta > Math.PI) delta -= 2 * Math.PI;
-      while (delta < -Math.PI) delta += 2 * Math.PI;
-      outPhases[i] += omega[i] + delta;
-      prevAnaPhases[i] = phases[i];
-    }
-
-    // Convert to time domain
-    const real = new Float32Array(W);
-    const imag = new Float32Array(W);
-    for (let i = 0; i < W; i++) {
-      real[i] = mags[i] * Math.cos(outPhases[i]);
-      imag[i] = mags[i] * Math.sin(outPhases[i]);
-    }
-    ifft(real, imag);
-
-    // Overlap-add
-    const off = sf * H;
-    for (let i = 0; i < W; i++) {
-      if (off + i < outputLen) out[off + i] += real[i] * hann[i];
-    }
-  }
-
-  // Normalize
-  let max = 0;
-  for (let i = 0; i < outputLen; i++) max = Math.max(max, Math.abs(out[i]));
-  if (max > 0.95) {
-    const scale = 0.95 / max;
-    for (let i = 0; i < outputLen; i++) out[i] *= scale;
-  }
-
-  const outBuf = audioCtx.createBuffer(ch, outputLen, sr);
-  for (let c = 0; c < ch; c++) {
-    const cd = outBuf.getChannelData(c);
-    for (let i = 0; i < outputLen; i++) cd[i] = out[i];
-  }
-  return outBuf;
-}
-
 // UI: build sequencer grid
-const seqEl = $('#sequencer');
 function buildSequencerGrid() {
   seqEl.innerHTML = '';
   for (let r = 0; r < 4; r++) {
@@ -834,13 +716,9 @@ function updateStepUI() {
 
 function onStepClick(row, col, e) {
   if (editMode === 'prob') {
-    // Cycle probability: 1.0 -> 0.75 -> 0.5 -> 0.25 -> 0 -> 1.0
-    const probs = [1.0, 0.75, 0.5, 0.25, 0];
-    const current = pattern[row][col].prob;
-    const idx = probs.indexOf(current);
-    const nextIdx = (idx + 1) % probs.length;
-    pattern[row][col].prob = probs[nextIdx];
-    if (probs[nextIdx] === 0) pattern[row][col].active = false;
+    const nextProb = cycleProbability(pattern[row][col].prob);
+    pattern[row][col].prob = nextProb;
+    if (nextProb === 0) pattern[row][col].active = false;
     else pattern[row][col].active = true;
   } else if (editMode === 'lock') {
     const param = $('#lockParam').value;
@@ -851,7 +729,6 @@ function onStepClick(row, col, e) {
     } else {
       stepData.locks[param] = val;
     }
-    // Ensure step is active if it has locks
     if (Object.keys(stepData.locks).length > 0 && !stepData.active) {
       stepData.active = true;
       stepData.prob = 1.0;
@@ -867,7 +744,6 @@ function onStepClick(row, col, e) {
 }
 
 function onStepRightClick(row, col) {
-  // Quick clear locks
   pattern[row][col].locks = {};
   updateStepUI();
 }
@@ -890,20 +766,20 @@ $$('.bank-btn').forEach(btn => {
 
 // Pattern copy/paste/clear
 $('#btnCopyPattern').addEventListener('click', () => {
-  clipboardPattern = JSON.parse(JSON.stringify(pattern));
+  clipboardPattern = copyPattern(pattern);
   $('#status').textContent = `Pattern ${currentBank} copied`;
 });
 
 $('#btnPastePattern').addEventListener('click', () => {
   if (!clipboardPattern) return;
-  patterns[currentBank] = JSON.parse(JSON.stringify(clipboardPattern));
+  patterns[currentBank] = copyPattern(clipboardPattern);
   pattern = patterns[currentBank];
   updateStepUI();
   $('#status').textContent = `Pattern pasted to ${currentBank}`;
 });
 
 $('#btnClearPattern').addEventListener('click', () => {
-  patterns[currentBank] = createEmptyPattern();
+  patterns[currentBank] = clearPattern();
   pattern = patterns[currentBank];
   updateStepUI();
   $('#status').textContent = `Pattern ${currentBank} cleared`;
@@ -985,56 +861,42 @@ $('#btnRecSeq').addEventListener('click', () => {
   $('#status').textContent = isRecordingSeq ? 'Recording to sequencer...' : 'Recording stopped';
 });
 
-function measureAudioLatency() {
-  // Use AudioContext.baseLatency and outputLatency if available
-  baseLatency = audioCtx.baseLatency || 0;
-  outputLatency = audioCtx.outputLatency || 0;
-  // Combined compensation: negative values shift audio earlier to compensate for output delay
-  latencyCompensation = -(baseLatency + outputLatency);
+// ============================================
+// Audio Latency Measurement and Compensation v0.7.0
+// ============================================
 
-  // Fallback measurement using round-trip oscillator technique
-  if (!audioCtx.outputLatency) {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    const analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 2048;
-    const bufLen = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufLen);
-    osc.connect(gain);
-    gain.connect(analyser);
-    analyser.connect(audioCtx.destination);
-    gain.gain.value = 0.001; // very quiet
-    osc.frequency.value = 1000;
-    const startTime = audioCtx.currentTime;
-    osc.start(startTime);
-    // Detect when sound reaches output
-    const check = () => {
-      analyser.getByteTimeDomainData(dataArray);
-      let max = 0;
-      for (let i = 0; i < bufLen; i++) max = Math.max(max, Math.abs(dataArray[i] - 128));
-      if (max > 10) {
-        measuredLatency = audioCtx.currentTime - startTime;
-        latencyCompensation = -measuredLatency;
-        osc.stop();
-        gain.disconnect();
-        analyser.disconnect();
-        updateLatencyDisplay();
-      } else {
-        requestAnimationFrame(check);
-      }
-    };
-    requestAnimationFrame(check);
-    setTimeout(() => {
-      if (osc) { osc.stop(); gain.disconnect(); analyser.disconnect(); }
-    }, 500);
+async function measureAudioLatency() {
+  if (!audioCtx) return;
+
+  // First, use built-in API values
+  const comp = calculateLatencyCompensation(audioCtx);
+  baseLatency = comp.baseLatency;
+  outputLatency = comp.outputLatency;
+  latencyCompensation = comp.compensation;
+
+  // If outputLatency is not available, do fallback measurement
+  if (!audioCtx.outputLatency || audioCtx.outputLatency === 0) {
+    try {
+      measuredLatency = await measureLatencyFallback(audioCtx);
+      latencyCompensation = -(baseLatency + measuredLatency);
+    } catch (err) {
+      measuredLatency = 0;
+    }
   }
+
+  latencyMeasured = true;
   updateLatencyDisplay();
 }
 
 function updateLatencyDisplay() {
-  const total = baseLatency + outputLatency + measuredLatency;
+  const total = Math.abs(baseLatency + outputLatency + measuredLatency);
+  const latencyEl = $('#latencyInfo');
   if (total > 0) {
+    latencyEl.textContent = `${(total * 1000).toFixed(1)}ms`;
+    latencyEl.classList.remove('hidden');
     $('#status').textContent = `Audio ready — latency: ${(total * 1000).toFixed(1)}ms`;
+  } else {
+    latencyEl.classList.add('hidden');
   }
 }
 
@@ -1076,8 +938,8 @@ function initAudio() {
     const lfo = audioCtx.createOscillator();
     const lfoGain = audioCtx.createGain();
     lfo.type = 'sine';
-    lfo.frequency.value = 0; // off by default
-    lfoGain.gain.value = 0.003; // small delay modulation
+    lfo.frequency.value = 0;
+    lfoGain.gain.value = 0.003;
     lfo.connect(lfoGain);
     lfoGain.connect(delay.delayTime);
     lfo.start();
@@ -1132,7 +994,6 @@ function initAudio() {
 
   isAudioStarted = true;
   measureAudioLatency();
-  $('#status').textContent = 'Audio ready';
 }
 
 function triggerPad(index, when = null, sliceIndex = null) {
@@ -1145,8 +1006,7 @@ function triggerPad(index, when = null, sliceIndex = null) {
   src.buffer = buf;
 
   // Apply pitch
-  const rate = Math.pow(2, (settings.pitchSemitones + settings.pitchFine / 100) / 12);
-  src.playbackRate.value = rate;
+  src.playbackRate.value = calculatePlaybackRate(settings.pitchSemitones, settings.pitchFine);
 
   // Apply chop/slice
   if (settings.chopMode && settings.slices.length > 0) {
@@ -1183,7 +1043,6 @@ function triggerPadSlice(index) {
     triggerPad(index);
     return;
   }
-  // Trigger a random slice
   const sliceIdx = Math.floor(Math.random() * settings.slices.length);
   triggerPad(index, null, sliceIdx);
 }
@@ -1196,7 +1055,7 @@ $('#fileInput').addEventListener('change', async (e) => {
     const ab = await files[i].arrayBuffer();
     const buf = await audioCtx.decodeAudioData(ab);
     buffers[i] = buf;
-    padSettings[i].stretchedBuffer = null; // clear derived buffer
+    padSettings[i].stretchedBuffer = null;
     $(`#slot${i}`).textContent = files[i].name.slice(0, 14);
   }
 });
@@ -1265,11 +1124,9 @@ $('#btnPlaySong').addEventListener('click', () => {
     return;
   }
   isPlayingSeq = true; currentStep = 0; uiStep = 0; songStep = 0; nextNoteTime = audioCtx.currentTime + 0.05;
-  // Find first non-empty slot
-  let startSlot = 0;
-  while (startSlot < SONG_SLOTS && !songChain[startSlot]) startSlot++;
-  if (startSlot < SONG_SLOTS) {
-    songStep = startSlot;
+  const firstStep = getFirstSongStep(songChain);
+  if (firstStep !== null) {
+    songStep = firstStep;
     pattern = patterns[songChain[songStep]];
   }
   $('#btnPlaySong').textContent = 'Stop Song';
@@ -1334,15 +1191,9 @@ function scheduler() {
     if (currentStep >= STEPS) {
       currentStep = 0;
       if (songMode && isPlayingSeq) {
-        // Advance song
-        let nextSongStep = (songStep + 1) % SONG_SLOTS;
-        let loopCount = 0;
-        while (!songChain[nextSongStep] && loopCount < SONG_SLOTS) {
-          nextSongStep = (nextSongStep + 1) % SONG_SLOTS;
-          loopCount++;
-        }
-        if (songChain[nextSongStep]) {
-          songStep = nextSongStep;
+        const nextStep = getNextSongStep(songChain, songStep);
+        if (nextStep !== null) {
+          songStep = nextStep;
           pattern = patterns[songChain[songStep]];
         }
         updateSongUI();
@@ -1361,9 +1212,9 @@ function scheduleNote(step, time) {
         wobbleLFO.frequency.setValueAtTime(stepData.locks.wobble * 5, time);
       }
       if (stepData.locks.bitcrush !== undefined && bitcrusherNode) {
-        const v = stepData.locks.bitcrush;
-        bitcrusherNode.bits = v < 0.01 ? 16 : Math.max(2, 16 - Math.floor(v * 14));
-        bitcrusherNode.normFreq = v < 0.01 ? 1 : Math.max(0.02, 1 - v * 0.98);
+        const params = calculateBitcrushParams(stepData.locks.bitcrush);
+        bitcrusherNode.bits = params.bits;
+        bitcrusherNode.normFreq = params.normFreq;
       }
       if (stepData.locks.filter !== undefined && filterNode) {
         filterNode.frequency.setValueAtTime(stepData.locks.filter, time);
@@ -1396,8 +1247,9 @@ $('#wobble').addEventListener('input', (e) => {
 $('#bitcrush').addEventListener('input', (e) => {
   const v = +e.target.value;
   if (bitcrusherNode) {
-    bitcrusherNode.bits = v < 0.01 ? 16 : Math.max(2, 16 - Math.floor(v * 14));
-    bitcrusherNode.normFreq = v < 0.01 ? 1 : Math.max(0.02, 1 - v * 0.98);
+    const params = calculateBitcrushParams(v);
+    bitcrusherNode.bits = params.bits;
+    bitcrusherNode.normFreq = params.normFreq;
   }
 });
 $('#filter').addEventListener('input', (e) => {
@@ -1433,7 +1285,8 @@ async function exportWAV() {
   const og = offlineCtx.createGain(); og.gain.value = masterGain.gain.value;
   const lp = offlineCtx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = filterNode.frequency.value;
   const bc = offlineCtx.createScriptProcessor(4096, 1, 1);
-  bc.bits = bitcrusherNode.bits; bc.normFreq = bitcrusherNode.normFreq;
+  const params = calculateBitcrushParams(+$('#bitcrush').value);
+  bc.bits = params.bits; bc.normFreq = params.normFreq;
   bc.onaudioprocess = bitcrusherNode.onaudioprocess;
   const wd = offlineCtx.createDelay(1.0);
   const lfo = offlineCtx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = wobbleLFO.frequency.value;
@@ -1466,8 +1319,7 @@ async function exportWAV() {
         if (buf) {
           const src = offlineCtx.createBufferSource();
           src.buffer = buf;
-          const rate = Math.pow(2, (padSettings[r].pitchSemitones + padSettings[r].pitchFine / 100) / 12);
-          src.playbackRate.value = rate;
+          src.playbackRate.value = calculatePlaybackRate(padSettings[r].pitchSemitones, padSettings[r].pitchFine);
           src.connect(og);
           src.start(t);
         }
@@ -1477,13 +1329,8 @@ async function exportWAV() {
     if (step >= STEPS) {
       step = 0;
       if (songMode) {
-        let nextSlot = (songSlot + 1) % SONG_SLOTS;
-        let loopCount = 0;
-        while (!songChain[nextSlot] && loopCount < SONG_SLOTS) {
-          nextSlot = (nextSlot + 1) % SONG_SLOTS;
-          loopCount++;
-        }
-        if (songChain[nextSlot]) {
+        const nextSlot = getNextSongStep(songChain, songSlot);
+        if (nextSlot !== null) {
           songSlot = nextSlot;
           bankPattern = patterns[songChain[songSlot]];
         }
@@ -1500,37 +1347,6 @@ async function exportWAV() {
   $('#status').textContent = 'WAV exported';
 }
 
-function bufferToWav(buf) {
-  const numOfChan = buf.numberOfChannels;
-  const length = buf.length * numOfChan * 2 + 44;
-  const buffer = new ArrayBuffer(length);
-  const view = new DataView(buffer);
-  const writeString = (offset, str) => { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); };
-  writeString(0, 'RIFF');
-  view.setUint32(4, 36 + buf.length * numOfChan * 2, true);
-  writeString(8, 'WAVE');
-  writeString(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, numOfChan, true);
-  view.setUint32(24, buf.sampleRate, true);
-  view.setUint32(28, buf.sampleRate * 2 * numOfChan, true);
-  view.setUint16(32, numOfChan * 2, true);
-  view.setUint16(34, 16, true);
-  writeString(36, 'data');
-  view.setUint32(40, buf.length * numOfChan * 2, true);
-  let offset = 44;
-  for (let i = 0; i < buf.length; i++) {
-    for (let c = 0; c < numOfChan; c++) {
-      let s = Math.max(-1, Math.min(1, buf.getChannelData(c)[i]));
-      s = s < 0 ? s * 0x8000 : s * 0x7FFF;
-      view.setInt16(offset, s, true);
-      offset += 2;
-    }
-  }
-  return new Blob([buffer], { type: 'audio/wav' });
-}
-
 $('#btnExportWav').addEventListener('click', exportWAV);
 
 // Tap tempo
@@ -1538,11 +1354,8 @@ $('#btnTap').addEventListener('click', () => {
   const now = Date.now();
   tapTimes.push(now);
   if (tapTimes.length > 8) tapTimes.shift();
-  if (tapTimes.length >= 2) {
-    const intervals = [];
-    for (let i = 1; i < tapTimes.length; i++) intervals.push(tapTimes[i] - tapTimes[i - 1]);
-    const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-    const newBpm = Math.round(60000 / avg);
+  const newBpm = calculateBpmFromTaps(tapTimes);
+  if (newBpm !== null) {
     bpm = Math.max(40, Math.min(200, newBpm));
     $('#bpm').value = bpm;
   }
@@ -1572,7 +1385,8 @@ $('#btnChop').addEventListener('click', () => {
 });
 $('#btnAutoSlice').addEventListener('click', () => {
   if (selectedPad < 0) return;
-  autoSlice(selectedPad, 8);
+  padSettings[selectedPad].slices = autoSlice(buffers[selectedPad], 8);
+  updatePadEditUI();
 });
 $('#btnStretch').addEventListener('click', async () => {
   if (selectedPad < 0 || !buffers[selectedPad]) return;
@@ -1581,7 +1395,7 @@ $('#btnStretch').addEventListener('click', async () => {
   $('#status').textContent = 'Stretching...';
   padSettings[selectedPad].stretchRatio = ratio;
   setTimeout(() => {
-    padSettings[selectedPad].stretchedBuffer = phaseVocoder(buffers[selectedPad], ratio);
+    padSettings[selectedPad].stretchedBuffer = phaseVocoder(buffers[selectedPad], ratio, audioCtx);
     $('#status').textContent = 'Stretch applied';
     updatePadEditUI();
   }, 50);
@@ -1606,15 +1420,9 @@ $('#btnSave').addEventListener('click', async () => {
         await dbDelete('samples', 'pad_' + i);
       }
     }
-    await dbPut('patterns', 'banks', JSON.stringify(patterns));
+    await dbPut('patterns', 'banks', serializePatterns(patterns));
     await dbPut('songs', 'default', JSON.stringify(songChain));
-    await dbPut('patterns', 'padSettings', JSON.stringify(padSettings.map(s => ({
-      pitchSemitones: s.pitchSemitones,
-      pitchFine: s.pitchFine,
-      slices: s.slices,
-      stretchRatio: s.stretchRatio,
-      chopMode: s.chopMode
-    }))));
+    await dbPut('patterns', 'padSettings', serializePadSettings(padSettings));
     $('#status').textContent = 'Set saved to browser';
   } catch (err) { $('#status').textContent = 'Save failed'; }
 });
@@ -1624,20 +1432,16 @@ $('#btnLoad').addEventListener('click', async () => {
     if (!isAudioStarted) initAudio();
     const savedPatterns = await dbGet('patterns', 'banks');
     if (savedPatterns) {
-      const parsed = JSON.parse(savedPatterns);
+      const loaded = deserializePatterns(savedPatterns);
       for (const bank of BANKS) {
-        if (parsed[bank]) {
-          patterns[bank] = normalizePattern(parsed[bank]);
-        }
+        patterns[bank] = loaded[bank];
       }
       pattern = patterns[currentBank];
       updateStepUI();
     } else {
-      // Try old format
       const oldPattern = await dbGet('patterns', 'default');
       if (oldPattern) {
-        const old = JSON.parse(oldPattern);
-        patterns.A = normalizePattern(old);
+        patterns.A = normalizePattern(JSON.parse(oldPattern));
         pattern = patterns[currentBank];
         updateStepUI();
       }
@@ -1671,10 +1475,9 @@ $('#btnLoad').addEventListener('click', async () => {
         const buf = await audioCtx.decodeAudioData(ab);
         buffers[i] = buf;
         $(`#slot${i}`).textContent = 'saved';
-        // Re-apply stretch if needed
         if (padSettings[i].stretchRatio !== 1 && padSettings[i].stretchRatio >= 0.5 && padSettings[i].stretchRatio <= 2) {
           setTimeout(() => {
-            padSettings[i].stretchedBuffer = phaseVocoder(buffers[i], padSettings[i].stretchRatio);
+            padSettings[i].stretchedBuffer = phaseVocoder(buffers[i], padSettings[i].stretchRatio, audioCtx);
             updatePadEditUI();
           }, 100 + i * 50);
         }
@@ -1776,10 +1579,9 @@ void main(){
   float band = smoothstep(0.35, 0.55, uv.y + drift + scan + n*0.06);
   float crush = step(0.5, fract(uv.x * (8.0 + u_bitcrush * 40.0) + t));
   vec3 col1 = vec3(0.06,0.07,0.09);
-  vec3 col2 = vec3(0.83,0.64,0.45); // accent
-  vec3 col3 = vec3(0.55,0.79,0.90); // accent2
+  vec3 col2 = vec3(0.83,0.64,0.45);
+  vec3 col3 = vec3(0.55,0.79,0.90);
   vec3 c = mix(col1, mix(col2, col3, crush), band * 0.8);
-  // vignette
   float vig = 1.0 - length((uv - 0.5) * 1.6);
   c *= clamp(vig, 0.0, 1.0);
   gl_FragColor = vec4(c, 1.0);

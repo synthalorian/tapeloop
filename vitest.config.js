@@ -12,6 +12,7 @@ export default defineConfig({
         'tests/',
         '**/*.config.*'
       ]
-    }
+    },
+    setupFiles: ['./tests/setup.js']
   }
 });
