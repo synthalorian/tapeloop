@@ -265,9 +265,11 @@
 <body>
 <header>
   <h1>TapeLoop</h1>
-  <span class="badge">Lo-Fi Sampler / Sequencer — v0.7.0</span>
+  <span class="badge">Lo-Fi Sampler / Sequencer — v0.8.0</span>
   <span id="status" class="status" style="margin-left:auto">Click Start Audio</span>
   <span id="latencyInfo" class="hidden"></span>
+  <span id="perfInfo" class="status" style="margin-left:8px;font-size:10px;color:var(--muted);"></span>
+  <button id="btnShowLogs" style="font-size:10px;margin-left:8px;padding:4px 8px;">Logs</button>
 </header>
 <canvas id="viz"></canvas>
 <main>
@@ -403,8 +405,15 @@ import {
   calculatePlaybackRate, calculateBitcrushParams,
   copyPattern, clearPattern,
   serializePatterns, deserializePatterns, serializePadSettings,
-  openDB, dbPut, dbGet, dbDelete
+  openDB, dbPut, dbGet, dbDelete,
+  createStateSnapshot
 } from './src/core.js';
+
+import { createLogger, LogLevel } from './src/logger.js';
+import { createAudioErrorBoundary, syncAudioTry, safeDecodeAudioData, wrapAudioNodeCreator } from './src/error-boundary.js';
+import { createCrashRecovery } from './src/crash-recovery.js';
+import { migrateState, CURRENT_SCHEMA_VERSION, getStoredSchemaVersion, setStoredSchemaVersion } from './src/migration.js';
+import { createPerformanceMonitor } from './src/performance-monitor.js';
 
 // Service Worker registration
 if ('serviceWorker' in navigator) {
@@ -413,6 +422,15 @@ if ('serviceWorker' in navigator) {
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
+
+// Stability systems v0.8.0
+const logger = createLogger({ level: LogLevel.INFO, maxEntries: 500 });
+const perfMonitor = createPerformanceMonitor(logger);
+const crashRecovery = createCrashRecovery(logger);
+const audioTry = createAudioErrorBoundary(logger, (type, err, msg) => {
+  $('#status').textContent = msg;
+});
+logger.info('TapeLoop v0.8.0 initializing');
 
 let audioCtx, masterGain, convolver, filterNode, bitcrusherNode, wobbleNode, wobbleLFO, limiterNode;
 let recorderDest, mediaRecorder, recordedChunks = [];
@@ -886,6 +904,10 @@ async function measureAudioLatency() {
 
   latencyMeasured = true;
   updateLatencyDisplay();
+
+  // Report to performance monitor
+  const totalMs = Math.abs(baseLatency + outputLatency + measuredLatency) * 1000;
+  perfMonitor.recordAudioLatency(totalMs);
 }
 
 function updateLatencyDisplay() {
@@ -904,6 +926,9 @@ function initAudio() {
   if (isAudioStarted) return;
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   audioCtx = new AudioContext();
+  wrapAudioNodeCreator(audioCtx, logger, (type, err, msg) => {
+    $('#status').textContent = msg;
+  });
   masterGain = audioCtx.createGain();
   masterGain.gain.value = 0.8;
 
@@ -994,6 +1019,23 @@ function initAudio() {
 
   isAudioStarted = true;
   measureAudioLatency();
+  perfMonitor.start();
+
+  // Crash recovery: auto-save state every 30s
+  crashRecovery.startAutoSave(() => {
+    if (!audioCtx) return null;
+    return createStateSnapshot(
+      patterns, songChain, padSettings, bpm, currentBank,
+      masterGain ? masterGain.gain.value : 0.8,
+      +$('#wobble').value,
+      +$('#bitcrush').value,
+      +$('#filter').value,
+      +$('#reverb').value,
+      +$('#limiter').value
+    );
+  });
+
+  logger.info('Audio initialized');
 }
 
 function triggerPad(index, when = null, sliceIndex = null) {
@@ -1052,11 +1094,21 @@ $('#fileInput').addEventListener('change', async (e) => {
   if (!isAudioStarted) initAudio();
   const files = Array.from(e.target.files);
   for (let i = 0; i < Math.min(files.length, PADS); i++) {
-    const ab = await files[i].arrayBuffer();
-    const buf = await audioCtx.decodeAudioData(ab);
-    buffers[i] = buf;
-    padSettings[i].stretchedBuffer = null;
-    $(`#slot${i}`).textContent = files[i].name.slice(0, 14);
+    try {
+      const ab = await files[i].arrayBuffer();
+      const buf = await safeDecodeAudioData(audioCtx, ab, logger, (type, err, msg) => {
+        $('#status').textContent = msg;
+      });
+      if (buf) {
+        buffers[i] = buf;
+        padSettings[i].stretchedBuffer = null;
+        $(`#slot${i}`).textContent = files[i].name.slice(0, 14);
+        logger.info(`Loaded sample: ${files[i].name} -> pad ${i + 1}`);
+      }
+    } catch (err) {
+      logger.error(`Failed to load sample ${files[i].name}`, { error: err.message });
+      $('#status').textContent = `Failed to load: ${files[i].name}`;
+    }
   }
 });
 
@@ -1083,6 +1135,7 @@ $('#btnRec').addEventListener('click', () => {
     isRecording = false;
     $('#btnRec').textContent = 'Record';
     $('#status').textContent = 'Recording stopped';
+    logger.info('Recording stopped');
     return;
   }
   recordedChunks = [];
@@ -1094,11 +1147,13 @@ $('#btnRec').addEventListener('click', () => {
     const a = document.createElement('a');
     a.href = url; a.download = 'tapeloop-mix.webm'; a.click();
     URL.revokeObjectURL(url);
+    logger.info('Mix exported');
   };
   mediaRecorder.start();
   isRecording = true;
   $('#btnRec').textContent = 'Stop Rec';
   $('#status').textContent = 'Recording...';
+  logger.info('Recording started');
 });
 
 $('#bpm').addEventListener('input', (e) => { bpm = Math.max(40, Math.min(200, +e.target.value)); });
@@ -1154,27 +1209,35 @@ async function resampleMaster() {
   masterGain.connect(spn);
 
   $('#status').textContent = `Resampling ${duration}s to pad ${targetPad+1}...`;
+  logger.info('Resampling started', { duration, targetPad: targetPad + 1 });
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     spn.onaudioprocess = (e) => {
-      const input = e.inputBuffer.getChannelData(0);
-      for (let i = 0; i < input.length && idx < numSamples; i++) {
-        recorded[idx++] = input[i];
-      }
-      if (idx >= numSamples) {
-        spn.disconnect();
-        zeroGain.disconnect();
-        masterGain.disconnect(spn);
+      try {
+        const input = e.inputBuffer.getChannelData(0);
+        for (let i = 0; i < input.length && idx < numSamples; i++) {
+          recorded[idx++] = input[i];
+        }
+        if (idx >= numSamples) {
+          spn.disconnect();
+          zeroGain.disconnect();
+          masterGain.disconnect(spn);
 
-        const buf = audioCtx.createBuffer(1, numSamples, sampleRate);
-        buf.getChannelData(0).set(recorded);
-        buffers[targetPad] = buf;
-        padSettings[targetPad].stretchedBuffer = null;
-        padSettings[targetPad].slices = [];
-        padSettings[targetPad].chopMode = false;
-        $(`#slot${targetPad}`).textContent = 'resampled';
-        $('#status').textContent = `Resampled to pad ${targetPad+1}`;
-        resolve();
+          const buf = audioCtx.createBuffer(1, numSamples, sampleRate);
+          buf.getChannelData(0).set(recorded);
+          buffers[targetPad] = buf;
+          padSettings[targetPad].stretchedBuffer = null;
+          padSettings[targetPad].slices = [];
+          padSettings[targetPad].chopMode = false;
+          $(`#slot${targetPad}`).textContent = 'resampled';
+          $('#status').textContent = `Resampled to pad ${targetPad+1}`;
+          logger.info('Resampling completed', { targetPad: targetPad + 1 });
+          resolve();
+        }
+      } catch (err) {
+        logger.error('Resampling failed', { error: err.message });
+        $('#status').textContent = 'Resampling failed';
+        reject(err);
       }
     };
   });
@@ -1278,6 +1341,7 @@ async function exportWAV() {
   if (!isAudioStarted) { alert('Start audio first'); return; }
   const duration = parseFloat(prompt('Export length in seconds:', '16')) || 16;
   $('#status').textContent = 'Rendering WAV...';
+  logger.info('Starting WAV export', { duration });
   const sampleRate = audioCtx.sampleRate;
   const offlineCtx = new OfflineAudioContext(2, duration * sampleRate, sampleRate);
 
@@ -1338,13 +1402,19 @@ async function exportWAV() {
     }
   }
 
-  const rendered = await offlineCtx.startRendering();
-  const wavBlob = bufferToWav(rendered);
-  const url = URL.createObjectURL(wavBlob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'tapeloop-export.wav'; a.click();
-  URL.revokeObjectURL(url);
-  $('#status').textContent = 'WAV exported';
+  try {
+    const rendered = await offlineCtx.startRendering();
+    const wavBlob = bufferToWav(rendered);
+    const url = URL.createObjectURL(wavBlob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'tapeloop-export.wav'; a.click();
+    URL.revokeObjectURL(url);
+    logger.info('WAV export completed', { duration });
+    $('#status').textContent = 'WAV exported';
+  } catch (err) {
+    logger.error('WAV export failed', { error: err.message });
+    $('#status').textContent = 'WAV export failed';
+  }
 }
 
 $('#btnExportWav').addEventListener('click', exportWAV);
@@ -1423,13 +1493,50 @@ $('#btnSave').addEventListener('click', async () => {
     await dbPut('patterns', 'banks', serializePatterns(patterns));
     await dbPut('songs', 'default', JSON.stringify(songChain));
     await dbPut('patterns', 'padSettings', serializePadSettings(padSettings));
+
+    // Also save to localStorage for crash recovery and migration
+    const state = createStateSnapshot(
+      patterns, songChain, padSettings, bpm, currentBank,
+      masterGain ? masterGain.gain.value : 0.8,
+      +$('#wobble').value,
+      +$('#bitcrush').value,
+      +$('#filter').value,
+      +$('#reverb').value,
+      +$('#limiter').value
+    );
+    localStorage.setItem('TapeLoop_state', JSON.stringify(state));
+    setStoredSchemaVersion(CURRENT_SCHEMA_VERSION);
+
+    logger.info('Set saved to browser');
     $('#status').textContent = 'Set saved to browser';
-  } catch (err) { $('#status').textContent = 'Save failed'; }
+  } catch (err) {
+    logger.error('Save failed', { error: err.message });
+    $('#status').textContent = 'Save failed';
+  }
 });
 
 $('#btnLoad').addEventListener('click', async () => {
   try {
     if (!isAudioStarted) initAudio();
+
+    // Schema migration check
+    const storedVersion = getStoredSchemaVersion();
+    if (storedVersion < CURRENT_SCHEMA_VERSION) {
+      logger.info(`Schema migration needed: v${storedVersion} -> v${CURRENT_SCHEMA_VERSION}`);
+      const rawState = localStorage.getItem('TapeLoop_state');
+      if (rawState) {
+        const oldState = JSON.parse(rawState);
+        const result = migrateState(oldState, logger);
+        if (result.success) {
+          localStorage.setItem('TapeLoop_state', JSON.stringify(result.data));
+          setStoredSchemaVersion(CURRENT_SCHEMA_VERSION);
+          logger.info(`Schema migration completed: ${result.migrationsRun} migrations applied`);
+        } else {
+          logger.warn('Schema migration failed, loading without migration', { error: result.error });
+        }
+      }
+    }
+
     const savedPatterns = await dbGet('patterns', 'banks');
     if (savedPatterns) {
       const loaded = deserializePatterns(savedPatterns);
@@ -1472,20 +1579,28 @@ $('#btnLoad').addEventListener('click', async () => {
       const wav = await dbGet('samples', 'pad_' + i);
       if (wav) {
         const ab = await wav.arrayBuffer();
-        const buf = await audioCtx.decodeAudioData(ab);
-        buffers[i] = buf;
-        $(`#slot${i}`).textContent = 'saved';
-        if (padSettings[i].stretchRatio !== 1 && padSettings[i].stretchRatio >= 0.5 && padSettings[i].stretchRatio <= 2) {
-          setTimeout(() => {
-            padSettings[i].stretchedBuffer = phaseVocoder(buffers[i], padSettings[i].stretchRatio, audioCtx);
-            updatePadEditUI();
-          }, 100 + i * 50);
+        const buf = await safeDecodeAudioData(audioCtx, ab, logger, (type, err, msg) => {
+          $('#status').textContent = msg;
+        });
+        if (buf) {
+          buffers[i] = buf;
+          $(`#slot${i}`).textContent = 'saved';
+          if (padSettings[i].stretchRatio !== 1 && padSettings[i].stretchRatio >= 0.5 && padSettings[i].stretchRatio <= 2) {
+            setTimeout(() => {
+              padSettings[i].stretchedBuffer = phaseVocoder(buffers[i], padSettings[i].stretchRatio, audioCtx);
+              updatePadEditUI();
+            }, 100 + i * 50);
+          }
         }
       }
     }
+    logger.info('Set loaded from browser');
     $('#status').textContent = 'Set loaded';
     updatePadEditUI();
-  } catch (err) { $('#status').textContent = 'Load failed'; }
+  } catch (err) {
+    logger.error('Load failed', { error: err.message });
+    $('#status').textContent = 'Load failed';
+  }
 });
 
 // Drag and drop sample loading
@@ -1495,11 +1610,21 @@ window.addEventListener('drop', async (e) => {
   if (!isAudioStarted) initAudio();
   const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('audio/'));
   for (let i = 0; i < Math.min(files.length, PADS); i++) {
-    const ab = await files[i].arrayBuffer();
-    const buf = await audioCtx.decodeAudioData(ab);
-    buffers[i] = buf;
-    padSettings[i].stretchedBuffer = null;
-    $(`#slot${i}`).textContent = files[i].name.slice(0, 14);
+    try {
+      const ab = await files[i].arrayBuffer();
+      const buf = await safeDecodeAudioData(audioCtx, ab, logger, (type, err, msg) => {
+        $('#status').textContent = msg;
+      });
+      if (buf) {
+        buffers[i] = buf;
+        padSettings[i].stretchedBuffer = null;
+        $(`#slot${i}`).textContent = files[i].name.slice(0, 14);
+        logger.info(`Dropped sample: ${files[i].name} -> pad ${i + 1}`);
+      }
+    } catch (err) {
+      logger.error(`Failed to drop sample ${files[i].name}`, { error: err.message });
+      $('#status').textContent = `Failed to load: ${files[i].name}`;
+    }
   }
 });
 
@@ -1621,6 +1746,43 @@ function renderViz(time) {
   requestAnimationFrame(renderViz);
 }
 requestAnimationFrame(renderViz);
+
+// Performance display update
+setInterval(() => {
+  const summary = perfMonitor.getSummary();
+  const perfEl = $('#perfInfo');
+  if (perfEl) {
+    perfEl.textContent = `FPS:${summary.fps.split(' ')[0]} | LAT:${summary.audioLatency.split(' ')[0]}`;
+  }
+}, 2000);
+
+// Crash recovery check on startup
+function checkCrashRecovery() {
+  if (crashRecovery.hasRecoverableSnapshot()) {
+    const snapshot = crashRecovery.loadSnapshot();
+    if (snapshot) {
+      const age = Math.round((Date.now() - snapshot.meta.timestamp) / 1000);
+      $('#status').textContent = `Crash recovery available (${age}s ago). Click Load Set to restore.`;
+      logger.info('Crash recovery snapshot found', { ageSeconds: age });
+    }
+  }
+}
+
+// Show logs button
+$('#btnShowLogs').addEventListener('click', () => {
+  const logs = logger.getRecent(100);
+  const text = logs.map(e => `[${new Date(e.timestamp).toISOString()}] ${e.level}: ${e.message}`).join('\n');
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'tapeloop-logs.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// Check for crash recovery on load
+setTimeout(checkCrashRecovery, 1000);
 </script>
 </body>
 </html>

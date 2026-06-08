@@ -28,6 +28,19 @@ global.MediaRecorder = class MockMediaRecorder {
   resume() { this.state = 'recording'; }
 };
 
+import { vi } from 'vitest';
+
+// Mock localStorage for jsdom environment
+const localStorageMock = {
+  store: {},
+  getItem(key) { return this.store[key] || null; },
+  setItem(key, value) { this.store[key] = String(value); },
+  removeItem(key) { delete this.store[key]; },
+  clear() { this.store = {}; }
+};
+
+vi.stubGlobal('localStorage', localStorageMock);
+
 // Mock navigator.serviceWorker
 global.navigator = global.navigator || {};
 Object.defineProperty(global.navigator, 'serviceWorker', {

@@ -476,3 +476,24 @@ export async function dbDelete(store, key) {
     req.onerror = () => reject(req.error);
   });
 }
+
+// State snapshot for crash recovery (lightweight; samples omitted)
+export function createStateSnapshot(patterns, songChain, padSettings, bpm, currentBank, masterVol, wobble, bitcrush, filterFreq, reverb, limiter) {
+  return {
+    version: '0.8.0',
+    timestamp: Date.now(),
+    patterns: JSON.parse(serializePatterns(patterns)),
+    songChain: songChain ? [...songChain] : null,
+    padSettings: padSettings ? JSON.parse(serializePadSettings(padSettings)) : null,
+    bpm: bpm || 90,
+    currentBank: currentBank || 'A',
+    effects: {
+      masterVol: masterVol !== undefined ? masterVol : 0.8,
+      wobble: wobble !== undefined ? wobble : 0,
+      bitcrush: bitcrush !== undefined ? bitcrush : 0,
+      filter: filterFreq !== undefined ? filterFreq : 8000,
+      reverb: reverb !== undefined ? reverb : 0,
+      limiter: limiter !== undefined ? limiter : 0.5
+    }
+  };
+}
