@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#d4a373">
+<link rel="manifest" href="manifest.json">
 <title>TapeLoop — Lo-Fi Sampler / Sequencer</title>
 <style>
   :root {
@@ -78,12 +80,25 @@
   .seq-label { font-size: 10px; color: var(--muted); }
   .status { font-size: 11px; color: var(--muted); }
   .hidden { display: none; }
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+    opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  .overlay.active { opacity: 1; pointer-events: auto; }
+  .overlay-inner { background: var(--panel); border: 1px solid #333; border-radius: 8px; padding: 24px; max-width: 420px; width: 90%; }
+  .overlay-inner h2 { margin: 0 0 12px; font-size: 14px; color: var(--accent); }
+  .overlay-inner table { width: 100%; font-size: 12px; border-collapse: collapse; }
+  .overlay-inner td { padding: 6px 0; border-bottom: 1px solid #222; }
+  .overlay-inner td:first-child { color: var(--accent2); font-family: monospace; width: 90px; }
+  .overlay-inner td:last-child { color: var(--muted); }
+  .overlay-inner .close { margin-top: 14px; text-align: right; }
 </style>
 </head>
 <body>
 <header>
   <h1>TapeLoop</h1>
-  <span class="badge">Lo-Fi Sampler / Sequencer</span>
+  <span class="badge">Lo-Fi Sampler / Sequencer — v0.4.0</span>
   <span id="status" class="status" style="margin-left:auto">Click Start Audio</span>
 </header>
 <canvas id="viz"></canvas>
@@ -95,13 +110,17 @@
       <button id="btnStop">Stop</button>
       <label style="font-size:11px;color:var(--muted)">BPM</label>
       <input id="bpm" class="bpm" type="number" value="90" min="40" max="200">
+      <button id="btnTap">Tap</button>
       <button id="btnPlaySeq" class="ok">Play Seq</button>
     </div>
     <div class="pads" id="pads"></div>
     <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <label style="font-size:11px;color:var(--muted)">Load sample</label>
       <input type="file" id="fileInput" accept="audio/*" multiple style="font-size:11px;color:var(--muted);">
+      <button id="btnSave">Save Set</button>
+      <button id="btnLoad">Load Set</button>
       <button id="btnExport">Export Mix</button>
+      <button id="btnExportWav">Export WAV</button>
     </div>
   </section>
 
@@ -112,6 +131,7 @@
     <div class="row"><label>Filter</label><input id="filter" type="range" min="100" max="8000" step="10" value="8000"></div>
     <div class="row"><label>Reverb</label><input id="reverb" type="range" min="0" max="1" step="0.01" value="0"></div>
     <div class="row"><label>Volume</label><input id="masterVol" type="range" min="0" max="1" step="0.01" value="0.8"></div>
+    <div class="row"><label>Limiter</label><input id="limiter" type="range" min="0" max="1" step="0.01" value="0.5"></div>
 
     <h2 style="margin-top:14px">Sequencer</h2>
     <div id="sequencer" class="seq-grid"></div>
@@ -119,15 +139,77 @@
   </aside>
 </main>
 
+<div id="shortcutOverlay" class="overlay">
+  <div class="overlay-inner">
+    <h2>Keyboard Shortcuts</h2>
+    <table>
+      <tr><td>1 – 8</td><td>Trigger pads 1–8</td></tr>
+      <tr><td>Space</td><td>Toggle sequencer</td></tr>
+      <tr><td>?</td><td>Show / hide this overlay</td></tr>
+      <tr><td>Drag file</td><td>Load sample onto page</td></tr>
+    </table>
+    <div class="close"><button id="btnCloseOverlay">Close</button></div>
+  </div>
+</div>
+
 <script>
 /* ================================================================
    TapeLoop — vanilla JS lo-fi sampler/sequencer + WebGL visualizer
+   v0.4.0 — PWA, IndexedDB, full WAV export, tap tempo, limiter
    ================================================================ */
+
+// Service Worker registration
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
 
-let audioCtx, masterGain, convolver, filterNode, bitcrusherNode, wobbleNode, wobbleLFO;
+// IndexedDB helpers
+const DB_NAME = 'TapeLoopDB';
+const DB_VERSION = 1;
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => resolve(req.result);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('samples')) db.createObjectStore('samples');
+      if (!db.objectStoreNames.contains('patterns')) db.createObjectStore('patterns');
+    };
+  });
+}
+async function dbPut(store, key, value) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).put(value, key);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+async function dbGet(store, key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readonly');
+    const req = tx.objectStore(store).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function dbDelete(store, key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).delete(key);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+let audioCtx, masterGain, convolver, filterNode, bitcrusherNode, wobbleNode, wobbleLFO, limiterNode;
 let recorderDest, mediaRecorder, recordedChunks = [];
 let isAudioStarted = false;
 let isRecording = false;
@@ -140,6 +222,9 @@ const PADS = 16;
 let bpm = 90;
 let lookahead = 25.0; // ms
 let scheduleAheadTime = 0.1; // s
+
+// Tap tempo state
+let tapTimes = [];
 
 const buffers = new Array(PADS).fill(null);
 const padNames = [
@@ -264,7 +349,26 @@ function initAudio() {
   wobbleNode.connect(convolver);
   convolver.connect(audioCtx.destination);
 
-  // Recorder destination
+  // Wet/dry reverb gain
+  const reverbWet = audioCtx.createGain();
+  reverbWet.gain.value = 0;
+  window._reverbWet = reverbWet;
+
+  // Master limiter (compressor acting as limiter)
+  limiterNode = audioCtx.createDynamicsCompressor();
+  limiterNode.threshold.value = -3;
+  limiterNode.knee.value = 0;
+  limiterNode.ratio.value = 20;
+  limiterNode.attack.value = 0.003;
+  limiterNode.release.value = 0.1;
+
+  // Rebuild chain: master -> filter -> bitcrusher -> wobble -> convolver -> limiter -> destination
+  convolver.disconnect();
+  convolver.connect(reverbWet);
+  reverbWet.connect(limiterNode);
+  limiterNode.connect(audioCtx.destination);
+
+  // Recorder destination (before limiter to capture full dynamic range)
   recorderDest = audioCtx.createMediaStreamDestination();
   convolver.connect(recorderDest);
 
@@ -378,44 +482,14 @@ $('#filter').addEventListener('input', (e) => {
 });
 $('#reverb').addEventListener('input', (e) => {
   const v = +e.target.value;
-  if (convolver) convolverGain.gain.setTargetAtTime(v, audioCtx.currentTime, 0.02);
+  if (window._reverbWet) window._reverbWet.gain.setTargetAtTime(v, audioCtx.currentTime, 0.02);
 });
 $('#masterVol').addEventListener('input', (e) => {
   const v = +e.target.value;
   if (masterGain) masterGain.gain.setTargetAtTime(v, audioCtx.currentTime, 0.02);
 });
 
-// Reverb dry/wet via gain node (inserted after convolver)
-const convolverGain = audioCtx ? audioCtx.createGain() : null;
-if (convolverGain) {
-  convolverGain.gain.value = 0;
-  convolver.connect(convolverGain);
-  convolverGain.connect(audioCtx.destination);
-}
-// Rebuild chain with convolverGain if needed — simplified: just use convolver wet level by scaling output
-// We'll patch by connecting convolver -> convolverGain -> destination, and master bypass stays.
-// Actually simpler: keep convolver in chain and adjust its output via a gain node inserted after it.
-// Re-wire below after elements exist.
-function rewireReverb() {
-  if (!audioCtx) return;
-  convolver.disconnect();
-  const wet = audioCtx.createGain();
-  wet.gain.value = 0;
-  convolver.connect(wet);
-  wet.connect(audioCtx.destination);
-  // expose for control
-  window._wetGain = wet;
-}
-// Hook rewire after first user gesture
-$('#btnStart').addEventListener('click', () => {
-  setTimeout(rewireReverb, 0);
-}, { once: true });
 
-// Override reverb control to use wet gain
-$('#reverb').addEventListener('input', (e) => {
-  const v = +e.target.value;
-  if (window._wetGain) window._wetGain.gain.setTargetAtTime(v, audioCtx.currentTime, 0.02);
-});
 
 // Export mix (same as record then download)
 $('#btnExport').addEventListener('click', () => {
@@ -425,11 +499,184 @@ $('#btnExport').addEventListener('click', () => {
   $('#status').textContent = 'Exporting 4s mix...';
 });
 
+// Full-quality WAV export using OfflineAudioContext
+async function exportWAV() {
+  if (!isAudioStarted) { alert('Start audio first'); return; }
+  const duration = parseFloat(prompt('Export length in seconds:', '16')) || 16;
+  $('#status').textContent = 'Rendering WAV...';
+  const sampleRate = audioCtx.sampleRate;
+  const offlineCtx = new OfflineAudioContext(2, duration * sampleRate, sampleRate);
+
+  // Rebuild full graph in offline context
+  const og = offlineCtx.createGain(); og.gain.value = masterGain.gain.value;
+  const lp = offlineCtx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = filterNode.frequency.value;
+  const bc = offlineCtx.createScriptProcessor(4096, 1, 1);
+  bc.bits = bitcrusherNode.bits; bc.normFreq = bitcrusherNode.normFreq;
+  bc.onaudioprocess = bitcrusherNode.onaudioprocess;
+  const wd = offlineCtx.createDelay(1.0);
+  const lfo = offlineCtx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = wobbleLFO.frequency.value;
+  const lfoG = offlineCtx.createGain(); lfoG.gain.value = 0.003;
+  lfo.connect(lfoG); lfoG.connect(wd.delayTime); lfo.start();
+  const cv = offlineCtx.createConvolver();
+  cv.buffer = convolver.buffer;
+  const wet = offlineCtx.createGain(); wet.gain.value = +$('#reverb').value;
+  const lim = offlineCtx.createDynamicsCompressor();
+  lim.threshold.value = limiterNode.threshold.value;
+  lim.knee.value = limiterNode.knee.value;
+  lim.ratio.value = limiterNode.ratio.value;
+  lim.attack.value = limiterNode.attack.value;
+  lim.release.value = limiterNode.release.value;
+
+  og.connect(lp); lp.connect(bc); bc.connect(wd); wd.connect(cv);
+  cv.connect(wet); wet.connect(lim); lim.connect(offlineCtx.destination);
+
+  // Render sequence
+  const stepTime = (60.0 / bpm) / 4;
+  let step = 0;
+  for (let t = 0; t < duration; t += stepTime) {
+    for (let r = 0; r < 4; r++) {
+      if (pattern[r][step]) {
+        const buf = buffers[r];
+        if (buf) {
+          const src = offlineCtx.createBufferSource();
+          src.buffer = buf;
+          src.connect(og);
+          src.start(t);
+        }
+      }
+    }
+    step = (step + 1) % STEPS;
+  }
+
+  const rendered = await offlineCtx.startRendering();
+  const wavBlob = bufferToWav(rendered);
+  const url = URL.createObjectURL(wavBlob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'tapeloop-export.wav'; a.click();
+  URL.revokeObjectURL(url);
+  $('#status').textContent = 'WAV exported';
+}
+
+function bufferToWav(buf) {
+  const numOfChan = buf.numberOfChannels;
+  const length = buf.length * numOfChan * 2 + 44;
+  const buffer = new ArrayBuffer(length);
+  const view = new DataView(buffer);
+  const writeString = (offset, str) => { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); };
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + buf.length * numOfChan * 2, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numOfChan, true);
+  view.setUint32(24, buf.sampleRate, true);
+  view.setUint32(28, buf.sampleRate * 2 * numOfChan, true);
+  view.setUint16(32, numOfChan * 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, buf.length * numOfChan * 2, true);
+  let offset = 44;
+  for (let i = 0; i < buf.length; i++) {
+    for (let c = 0; c < numOfChan; c++) {
+      let s = Math.max(-1, Math.min(1, buf.getChannelData(c)[i]));
+      s = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      view.setInt16(offset, s, true);
+      offset += 2;
+    }
+  }
+  return new Blob([buffer], { type: 'audio/wav' });
+}
+
+$('#btnExportWav').addEventListener('click', exportWAV);
+
+// Tap tempo
+$('#btnTap').addEventListener('click', () => {
+  const now = Date.now();
+  tapTimes.push(now);
+  if (tapTimes.length > 8) tapTimes.shift();
+  if (tapTimes.length >= 2) {
+    const intervals = [];
+    for (let i = 1; i < tapTimes.length; i++) intervals.push(tapTimes[i] - tapTimes[i - 1]);
+    const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+    const newBpm = Math.round(60000 / avg);
+    bpm = Math.max(40, Math.min(200, newBpm));
+    $('#bpm').value = bpm;
+  }
+});
+
+// Limiter control
+$('#limiter').addEventListener('input', (e) => {
+  const v = +e.target.value;
+  if (limiterNode) {
+    limiterNode.threshold.setTargetAtTime(v > 0.9 ? -40 : -3 + (1 - v) * 20, audioCtx.currentTime, 0.02);
+  }
+});
+
+// Save / Load via IndexedDB
+$('#btnSave').addEventListener('click', async () => {
+  try {
+    for (let i = 0; i < PADS; i++) {
+      if (buffers[i]) {
+        const clone = audioCtx.createBuffer(buffers[i].numberOfChannels, buffers[i].length, buffers[i].sampleRate);
+        for (let c = 0; c < buffers[i].numberOfChannels; c++) clone.getChannelData(c).set(buffers[i].getChannelData(c));
+        await dbPut('samples', 'pad_' + i, bufferToWav(clone));
+      } else {
+        await dbDelete('samples', 'pad_' + i);
+      }
+    }
+    await dbPut('patterns', 'default', JSON.stringify(pattern));
+    $('#status').textContent = 'Set saved to browser';
+  } catch (err) { $('#status').textContent = 'Save failed'; }
+});
+
+$('#btnLoad').addEventListener('click', async () => {
+  try {
+    if (!isAudioStarted) initAudio();
+    const savedPattern = await dbGet('patterns', 'default');
+    if (savedPattern) {
+      pattern = JSON.parse(savedPattern);
+      $$('.step').forEach(el => {
+        const r = +el.dataset.row, c = +el.dataset.col;
+        el.classList.toggle('on', pattern[r][c]);
+      });
+    }
+    for (let i = 0; i < PADS; i++) {
+      const wav = await dbGet('samples', 'pad_' + i);
+      if (wav) {
+        const ab = await wav.arrayBuffer();
+        const buf = await audioCtx.decodeAudioData(ab);
+        buffers[i] = buf;
+        $(`#slot${i}`).textContent = 'saved';
+      }
+    }
+    $('#status').textContent = 'Set loaded';
+  } catch (err) { $('#status').textContent = 'Load failed'; }
+});
+
+// Drag and drop sample loading
+window.addEventListener('dragover', (e) => { e.preventDefault(); });
+window.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  if (!isAudioStarted) initAudio();
+  const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('audio/'));
+  for (let i = 0; i < Math.min(files.length, PADS); i++) {
+    const ab = await files[i].arrayBuffer();
+    const buf = await audioCtx.decodeAudioData(ab);
+    buffers[i] = buf;
+    $(`#slot${i}`).textContent = files[i].name.slice(0, 14);
+  }
+});
+
 // Keyboard shortcuts: 1-8 trigger pads 0-7
+const shortcutOverlay = $('#shortcutOverlay');
 window.addEventListener('keydown', (e) => {
+  if (e.key === '?') { e.preventDefault(); shortcutOverlay.classList.toggle('active'); }
   if (e.key >= '1' && e.key <= '8') triggerPad(+e.key - 1);
   if (e.key === ' ') { e.preventDefault(); $('#btnPlaySeq').click(); }
 });
+$('#btnCloseOverlay').addEventListener('click', () => shortcutOverlay.classList.remove('active'));
+shortcutOverlay.addEventListener('click', (e) => { if (e.target === shortcutOverlay) shortcutOverlay.classList.remove('active'); });
 
 /* =========================
    WebGL Tape Visualizer

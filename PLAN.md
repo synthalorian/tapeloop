@@ -19,13 +19,13 @@
 - [ ] MIDI controller support (Web MIDI API)
 - [ ] Multi-track export (stem rendering)
 
-## v0.4.0 — Phase 4: PWA & polish
-- [ ] PWA offline support with service worker
-- [ ] IndexedDB for sample and pattern persistence
-- [ ] Keyboard shortcut reference overlay
-- [ ] Export to WAV (full quality, not just 4-second render)
-- [ ] BPM tap tempo
-- [ ] Master limiter on output
+## v0.4.0 ✅ — Phase 4: PWA & polish
+- [x] PWA offline support with service worker
+- [x] IndexedDB for sample and pattern persistence
+- [x] Keyboard shortcut reference overlay
+- [x] Export to WAV (full quality, not just 4-second render)
+- [x] BPM tap tempo
+- [x] Master limiter on output
 
 ## v0.5.0 — Sequencer power
 - [ ] Multiple pattern banks (A/B/C/D)
