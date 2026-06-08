@@ -1,0 +1,60 @@
+{
+  "version": "0.9.0",
+  "name": "Techno",
+  "description": "Driving techno sequence at 130 BPM with closed hats and snare accents.",
+  "bpm": 130,
+  "currentBank": "A",
+  "patterns": {
+    "A": [
+      [{"active":true,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}}],
+      [{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}}],
+      [{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}}],
+      [{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}}]
+    ],
+    "B": [
+      [{"active":true,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}}],
+      [{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}}],
+      [{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}}],
+      [{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}}]
+    ],
+    "C": [
+      [{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}}],
+      [{"active":true,"prob":0.5,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}}],
+      [{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}}],
+      [{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}}]
+    ],
+    "D": [
+      [{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}}],
+      [{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}}],
+      [{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}}],
+      [{"active":true,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":true,"prob":0.5,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":true,"prob":0.5,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":true,"prob":0.5,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":true,"prob":0.5,"locks":{}},{"active":true,"prob":0.75,"locks":{}}]
+    ]
+  },
+  "songChain": ["A","B","C","B","A","D",null,null,null,null,null,null,null,null,null,null],
+  "padSettings": [
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false}
+  ],
+  "effects": {
+    "masterVol": 0.92,
+    "wobble": 0.04,
+    "bitcrush": 0.05,
+    "filter": 7500,
+    "reverb": 0.15,
+    "limiter": 0.65
+  }
+}

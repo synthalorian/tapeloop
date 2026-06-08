@@ -1,0 +1,60 @@
+{
+  "version": "0.9.0",
+  "name": "Boom Bap",
+  "description": "Classic hip-hop drum pattern at 88 BPM with swing and ghost notes.",
+  "bpm": 88,
+  "currentBank": "A",
+  "patterns": {
+    "A": [
+      [{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}}],
+      [{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}}],
+      [{"active":true,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}}],
+      [{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}}]
+    ],
+    "B": [
+      [{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}}],
+      [{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}}],
+      [{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}}],
+      [{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}}]
+    ],
+    "C": [
+      [{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}}],
+      [{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}},{"active":false,"prob":1,"locks":{}}],
+      [{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}}],
+      [{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}}]
+    ],
+    "D": [
+      [{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}}],
+      [{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.75,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.5,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":false,"prob":1,"locks":{}}],
+      [{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}},{"active":true,"prob":1,"locks":{}}],
+      [{"active":true,"prob":0.25,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.25,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.25,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.25,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.25,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.25,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.25,"locks":{}},{"active":false,"prob":1,"locks":{}},{"active":true,"prob":0.25,"locks":{}},{"active":false,"prob":1,"locks":{}}]
+    ]
+  },
+  "songChain": ["A","B","A","C","D",null,null,null,null,null,null,null,null,null,null,null],
+  "padSettings": [
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false},
+    {"pitchSemitones":0,"pitchFine":0,"slices":[],"stretchRatio":1,"chopMode":false}
+  ],
+  "effects": {
+    "masterVol": 0.85,
+    "wobble": 0.12,
+    "bitcrush": 0.08,
+    "filter": 6500,
+    "reverb": 0.18,
+    "limiter": 0.6
+  }
+}

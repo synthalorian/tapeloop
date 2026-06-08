@@ -1,6 +1,6 @@
 {
   "name": "tapeloop",
-  "version": "0.7.0",
+  "version": "0.9.0",
   "description": "Browser-based lo-fi audio sampler / sequencer",
   "type": "module",
   "scripts": {
