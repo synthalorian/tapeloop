@@ -40,6 +40,14 @@ button.active-learn{background:#ff00ff;color:#000;animation:pulse .5s infinite a
 #visualizer{width:100%;max-width:600px;height:100px;background:#000;border:1px solid #333;margin:1rem 0}
 #status{color:#888;font-size:.8rem;margin-top:.5rem;min-height:1.2rem;text-align:center}
 
+/* Track layout */
+.track{margin:1rem 0;width:100%;max-width:600px}
+.track-header{display:flex;gap:.5rem;align-items:center;margin-bottom:.3rem}
+.track-header span{color:#ff00ff;font-size:.8rem;font-weight:bold;text-transform:uppercase}
+.track-header button{background:#1a1a2e;border:1px solid #666;color:#888;padding:.2rem .6rem;font-family:inherit;cursor:pointer;font-size:.7rem}
+.track-header button:hover{border-color:#ff00ff;color:#ff00ff}
+.track-header button.active{background:#ff00ff;color:#000;border-color:#ff00ff}
+
 /* MIDI section styles */
 #midi-section{display:flex;gap:1rem;align-items:center;flex-wrap:wrap;justify-content:center;margin:.5rem 0;padding:.5rem;border:1px solid #333;border-radius:8px;background:#111}
 #midi-status{font-size:.75rem;color:#888}
@@ -97,7 +105,25 @@ button.active-learn{background:#ff00ff;color:#000;animation:pulse .5s infinite a
 </div>
 
 <div id="pads"></div>
-<div id="sequencer"></div>
+
+<div class="track">
+  <div class="track-header">
+    <span>TRACK 1</span>
+    <button id="mute1">MUTE</button>
+    <button id="solo1">SOLO</button>
+  </div>
+  <div id="sequencer"></div>
+</div>
+
+<div class="track">
+  <div class="track-header">
+    <span>TRACK 2</span>
+    <button id="mute2">MUTE</button>
+    <button id="solo2">SOLO</button>
+  </div>
+  <div id="sequencer2"></div>
+</div>
+
 <canvas id="visualizer"></canvas>
 <div id="status">Click a pad to load a sample. Press 1-8 to trigger.</div>
 
@@ -109,11 +135,14 @@ masterGain.connect(audioCtx.destination);
 let samples = Array(8).fill(null);
 let sampleNames = Array(8).fill('');
 let sequencer = Array(16).fill(false);
+let sequencer2 = Array(16).fill(false);
 let currentStep = 0;
 let isPlaying = false;
 let bpm = 120;
 let nextNoteTime = 0;
 let timerID = null;
+let track1Mute = false, track1Solo = false;
+let track2Mute = false, track2Solo = false;
 
 // ========== MIDI STATE ==========
 let midiAccess = null;
@@ -212,6 +241,14 @@ for(let i=0;i<16;i++){
   step.className='step';
   step.onclick = ()=>{sequencer[i]=!sequencer[i];step.classList.toggle('active');};
   seqDiv.appendChild(step);
+}
+
+const seqDiv2 = document.getElementById('sequencer2');
+for(let i=0;i<16;i++){
+  const step = document.createElement('div');
+  step.className='step';
+  step.onclick = ()=>{sequencer2[i]=!sequencer2[i];step.classList.toggle('active');};
+  seqDiv2.appendChild(step);
 }
 
 function loadSample(idx,file){
@@ -383,23 +420,37 @@ function applyEffects(node, destination = masterGain){
 }
 
 // ========== SCHEDULER ==========
+function playScheduledPad(padIndex, time){
+  const src = audioCtx.createBufferSource();
+  src.buffer = samples[padIndex];
+  if(src.buffer){
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0.6;
+    src.connect(gain);
+    applyEffects(gain);
+    src.start(time);
+  }
+}
+
 function schedule(){
   const secondsPerBeat = 60.0/bpm;
   const secondsPerStep = secondsPerBeat/4;
   while(nextNoteTime<audioCtx.currentTime+0.1){
-    if(sequencer[currentStep]){
-      const src = audioCtx.createBufferSource();
-      src.buffer = samples[0];
-      if(src.buffer){
-        const gain = audioCtx.createGain();
-        gain.gain.value = 0.6;
-        src.connect(gain);
-        applyEffects(gain);
-        src.start(nextNoteTime);
-      }
+    const anySolo = track1Solo || track2Solo;
+
+    // Track 1 -> pad 0
+    if(sequencer[currentStep] && (track1Solo || (!anySolo && !track1Mute))){
+      playScheduledPad(0, nextNoteTime);
     }
+
+    // Track 2 -> pad 1
+    if(sequencer2[currentStep] && (track2Solo || (!anySolo && !track2Mute))){
+      playScheduledPad(1, nextNoteTime);
+    }
+
     // Update visual
-    document.querySelectorAll('.step').forEach((s,i)=>s.classList.toggle('current',i===currentStep));
+    document.querySelectorAll('#sequencer .step').forEach((s,i)=>s.classList.toggle('current',i===currentStep));
+    document.querySelectorAll('#sequencer2 .step').forEach((s,i)=>s.classList.toggle('current',i===currentStep));
     currentStep = (currentStep+1)%16;
     nextNoteTime += secondsPerStep;
   }
@@ -415,7 +466,7 @@ document.getElementById('playBtn').onclick = ()=>{
     schedule();
   }else{
     cancelAnimationFrame(timerID);
-    document.querySelectorAll('.step').forEach(s=>s.classList.remove('current'));
+    document.querySelectorAll('#sequencer .step, #sequencer2 .step').forEach(s=>s.classList.remove('current'));
   }
 };
 
@@ -474,6 +525,19 @@ document.getElementById('tapBtn').onclick = ()=>{
   }
 };
 
+// ========== TRACK MUTE/SOLO ==========
+function updateMuteSoloButtons(){
+  document.getElementById('mute1').classList.toggle('active', track1Mute);
+  document.getElementById('solo1').classList.toggle('active', track1Solo);
+  document.getElementById('mute2').classList.toggle('active', track2Mute);
+  document.getElementById('solo2').classList.toggle('active', track2Solo);
+}
+
+document.getElementById('mute1').onclick = ()=>{ track1Mute = !track1Mute; updateMuteSoloButtons(); };
+document.getElementById('solo1').onclick = ()=>{ track1Solo = !track1Solo; updateMuteSoloButtons(); };
+document.getElementById('mute2').onclick = ()=>{ track2Mute = !track2Mute; updateMuteSoloButtons(); };
+document.getElementById('solo2').onclick = ()=>{ track2Solo = !track2Solo; updateMuteSoloButtons(); };
+
 // ========== PATTERN SAVE/LOAD ==========
 const PATTERN_KEY = 'tapeloop_patterns';
 function getPatterns(){
@@ -497,7 +561,7 @@ document.getElementById('savePatternBtn').onclick = ()=>{
   const name = prompt('Pattern name:');
   if(!name)return;
   const patterns = getPatterns();
-  patterns[name] = {sequencer:[...sequencer],bpm};
+  patterns[name] = {sequencer:[...sequencer],sequencer2:[...sequencer2],bpm};
   savePatterns(patterns);
   updatePatternSelect();
   updateStatus(`Saved pattern: ${name}`);
@@ -509,10 +573,12 @@ document.getElementById('loadPatternBtn').onclick = ()=>{
   const p = patterns[name];
   if(!p){updateStatus('Pattern not found');return;}
   sequencer = [...p.sequencer];
+  sequencer2 = [...(p.sequencer2 || Array(16).fill(false))];
   bpm = p.bpm||120;
   document.getElementById('bpmSlider').value = bpm;
   document.getElementById('bpmVal').textContent = bpm;
-  document.querySelectorAll('.step').forEach((s,i)=>s.classList.toggle('active',sequencer[i]));
+  document.querySelectorAll('#sequencer .step').forEach((s,i)=>s.classList.toggle('active',sequencer[i]));
+  document.querySelectorAll('#sequencer2 .step').forEach((s,i)=>s.classList.toggle('active',sequencer2[i]));
   updateStatus(`Loaded pattern: ${name}`);
 };
 document.getElementById('deletePatternBtn').onclick = ()=>{
@@ -572,6 +638,8 @@ importFileInput.onchange = (e)=>{
         finalName = `${name} (${counter})`;
         counter++;
       }
+      // Backward-compat: ensure sequencer2 exists
+      if(!data.pattern.sequencer2) data.pattern.sequencer2 = Array(16).fill(false);
       patterns[finalName] = data.pattern;
       savePatterns(patterns);
       updatePatternSelect();
@@ -588,8 +656,7 @@ updatePatternSelect();
 
 // ========== EXPORT TO WAV (PATTERN) ==========
 document.getElementById('exportWavBtn').onclick = async ()=>{
-  const loadedPads = samples.map((s,i) => s ? i : -1).filter(i => i >= 0);
-  if(loadedPads.length === 0){updateStatus('Load at least one sample first');return;}
+  if(!samples[0] && !samples[1]){updateStatus('Load at least one sample on pad 1 or 2 first');return;}
   updateStatus('Rendering WAV...');
   const duration = (60/bpm)*4; // 4 bars = 16 steps
   const offlineCtx = new OfflineAudioContext(2,audioCtx.sampleRate*duration,audioCtx.sampleRate);
@@ -601,24 +668,36 @@ document.getElementById('exportWavBtn').onclick = async ()=>{
   const resonance = parseFloat(document.getElementById('resonance').value);
 
   for(let step=0;step<16;step++){
-    if(sequencer[step]){
-      // Render ALL loaded pads on this step
-      for(const padIdx of loadedPads){
-        const src = offlineCtx.createBufferSource();
-        src.buffer = samples[padIdx];
-        const gain = offlineCtx.createGain();
-        gain.gain.value = 0.6 / loadedPads.length; // Scale gain to avoid clipping
-        const time = step*secondsPerStep;
-        src.connect(gain);
-        // Apply filter in offline context
-        const filter = offlineCtx.createBiquadFilter();
-        filter.type='lowpass';
-        filter.frequency.value = filterFreq;
-        filter.Q.value = resonance;
-        gain.connect(filter);
-        filter.connect(offlineCtx.destination);
-        src.start(time);
-      }
+    const time = step*secondsPerStep;
+    // Track 1 -> pad 0
+    if(sequencer[step] && samples[0]){
+      const src = offlineCtx.createBufferSource();
+      src.buffer = samples[0];
+      const gain = offlineCtx.createGain();
+      gain.gain.value = 0.6;
+      src.connect(gain);
+      const filter = offlineCtx.createBiquadFilter();
+      filter.type='lowpass';
+      filter.frequency.value = filterFreq;
+      filter.Q.value = resonance;
+      gain.connect(filter);
+      filter.connect(offlineCtx.destination);
+      src.start(time);
+    }
+    // Track 2 -> pad 1
+    if(sequencer2[step] && samples[1]){
+      const src = offlineCtx.createBufferSource();
+      src.buffer = samples[1];
+      const gain = offlineCtx.createGain();
+      gain.gain.value = 0.6;
+      src.connect(gain);
+      const filter = offlineCtx.createBiquadFilter();
+      filter.type='lowpass';
+      filter.frequency.value = filterFreq;
+      filter.Q.value = resonance;
+      gain.connect(filter);
+      filter.connect(offlineCtx.destination);
+      src.start(time);
     }
   }
   const rendered = await offlineCtx.startRendering();
