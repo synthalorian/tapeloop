@@ -51,6 +51,7 @@
   }
   .pad:hover { border-color: var(--accent); }
   .pad:active, .pad.playing { transform: scale(0.97); background: #252830; border-color: var(--accent2); }
+  .pad.selected { border-color: var(--accent); outline: 2px solid var(--accent); }
   .pad .label { font-size: 11px; color: var(--muted); }
   .pad .slot { font-size: 10px; color: #555; margin-top: 4px; }
   .controls { display: flex; flex-direction: column; gap: 10px; }
@@ -127,12 +128,19 @@
   .overlay-inner td:first-child { color: var(--accent2); font-family: monospace; width: 90px; }
   .overlay-inner td:last-child { color: var(--muted); }
   .overlay-inner .close { margin-top: 14px; text-align: right; }
+
+  /* Pad Edit */
+  .pad-edit input[type="number"] {
+    background: #1e2026; color: var(--text); border: 1px solid #2a2d35; border-radius: 3px;
+    padding: 4px; font-family: inherit; font-size: 12px; width: 60px;
+  }
+  .pad-edit .row { margin-bottom: 6px; }
 </style>
 </head>
 <body>
 <header>
   <h1>TapeLoop</h1>
-  <span class="badge">Lo-Fi Sampler / Sequencer — v0.5.0</span>
+  <span class="badge">Lo-Fi Sampler / Sequencer — v0.6.0</span>
   <span id="status" class="status" style="margin-left:auto">Click Start Audio</span>
 </header>
 <canvas id="viz"></canvas>
@@ -148,6 +156,7 @@
       <button id="btnPlaySeq" class="ok">Play Seq</button>
       <button id="btnRecSeq" class="danger">Rec Seq</button>
       <button id="btnPlaySong" class="ok hidden">Play Song</button>
+      <button id="btnResample" style="font-size:11px;">Resample</button>
     </div>
     <div class="pads" id="pads"></div>
     <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -168,6 +177,31 @@
     <div class="row"><label>Reverb</label><input id="reverb" type="range" min="0" max="1" step="0.01" value="0"></div>
     <div class="row"><label>Volume</label><input id="masterVol" type="range" min="0" max="1" step="0.01" value="0.8"></div>
     <div class="row"><label>Limiter</label><input id="limiter" type="range" min="0" max="1" step="0.01" value="0.5"></div>
+
+    <h2 style="margin-top:14px">Pad Edit</h2>
+    <div id="padEditPanel" class="pad-edit" style="display:none;">
+      <div class="row"><span id="selectedPadName" style="font-size:12px;color:var(--accent);"></span></div>
+      <div class="row">
+        <label>Pitch (st)</label>
+        <input id="pitchSemi" type="number" value="0" min="-24" max="24" step="1">
+        <label style="min-width:auto">fine</label>
+        <input id="pitchFine" type="number" value="0" min="-100" max="100" step="1">
+      </div>
+      <div class="row">
+        <button id="btnChop" style="font-size:11px;">Chop Off</button>
+        <span id="sliceCount" style="font-size:11px;color:var(--muted);margin-left:auto;">Slices: 0</span>
+      </div>
+      <div class="row">
+        <button id="btnAutoSlice" style="font-size:11px;">Auto-slice</button>
+      </div>
+      <div class="row">
+        <label>Stretch</label>
+        <input id="stretchRatio" type="number" value="1" min="0.5" max="2" step="0.1">
+        <button id="btnStretch" style="font-size:11px;">Apply</button>
+        <button id="btnResetStretch" style="font-size:11px;">Reset</button>
+      </div>
+      <div class="row" id="stretchStatus" style="font-size:11px;color:var(--muted);"></div>
+    </div>
 
     <h2 style="margin-top:14px">Sequencer</h2>
 
@@ -214,6 +248,8 @@
     <h2>Keyboard Shortcuts</h2>
     <table>
       <tr><td>1 – 8</td><td>Trigger pads 1–8</td></tr>
+      <tr><td>Shift + 1–8</td><td>Select pads 1–8</td></tr>
+      <tr><td>Q – I</td><td>Trigger slice on pads 1–8</td></tr>
       <tr><td>Space</td><td>Toggle sequencer</td></tr>
       <tr><td>R</td><td>Toggle live recording</td></tr>
       <tr><td>?</td><td>Show / hide this overlay</td></tr>
@@ -226,7 +262,7 @@
 <script>
 /* ================================================================
    TapeLoop — vanilla JS lo-fi sampler/sequencer + WebGL visualizer
-   v0.5.0 — Pattern banks, song mode, probability, param locks, live recording
+   v0.6.0 — Resample, loop slicing, time-stretch, pitch shift
    ================================================================ */
 
 // Service Worker registration
@@ -308,6 +344,17 @@ const padNames = [
   "SYN1","SYN2","SYN3","SYN4"
 ];
 
+// Pad settings: pitch, slices, stretch, chop
+const padSettings = Array.from({length: PADS}, () => ({
+  pitchSemitones: 0,
+  pitchFine: 0,
+  slices: [],
+  stretchedBuffer: null,
+  stretchRatio: 1,
+  chopMode: false
+}));
+let selectedPad = -1;
+
 // Pattern banks: A/B/C/D
 const BANKS = ['A', 'B', 'C', 'D'];
 let currentBank = 'A';
@@ -365,8 +412,213 @@ for (let i = 0; i < PADS; i++) {
   d.className = 'pad';
   d.dataset.idx = i;
   d.innerHTML = `<span class="label">${padNames[i]}</span><span class="slot" id="slot${i}">empty</span>`;
-  d.addEventListener('mousedown', () => triggerPad(i));
+  d.addEventListener('mousedown', (e) => {
+    if (e.shiftKey) {
+      e.preventDefault();
+      selectPad(i);
+    } else {
+      triggerPad(i);
+      selectPad(i);
+    }
+  });
   padsEl.appendChild(d);
+}
+
+function selectPad(index) {
+  selectedPad = index;
+  $$('.pad').forEach((p, i) => p.classList.toggle('selected', i === index));
+  updatePadEditUI();
+}
+
+function updatePadEditUI() {
+  const panel = $('#padEditPanel');
+  if (selectedPad < 0) {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = 'block';
+  const s = padSettings[selectedPad];
+  $('#selectedPadName').textContent = `${selectedPad + 1}: ${padNames[selectedPad]} — ${buffers[selectedPad] ? ($(`#slot${selectedPad}`).textContent) : 'empty'}`;
+  $('#pitchSemi').value = s.pitchSemitones;
+  $('#pitchFine').value = s.pitchFine;
+  $('#btnChop').textContent = s.chopMode ? 'Chop On' : 'Chop Off';
+  $('#btnChop').classList.toggle('active', s.chopMode);
+  $('#sliceCount').textContent = `Slices: ${s.slices.length}`;
+  $('#stretchRatio').value = s.stretchRatio;
+  $('#stretchStatus').textContent = s.stretchedBuffer ? `Stretched (${s.stretchRatio.toFixed(2)}x)` : 'Original';
+}
+
+// Auto-slice into equal segments
+function autoSlice(index, numSlices) {
+  const buf = buffers[index];
+  if (!buf) return;
+  const len = buf.length;
+  const sliceSize = Math.floor(len / numSlices);
+  const slices = [];
+  for (let i = 0; i < numSlices; i++) {
+    slices.push({
+      start: i * sliceSize,
+      end: (i === numSlices - 1) ? len : (i + 1) * sliceSize
+    });
+  }
+  padSettings[index].slices = slices;
+  updatePadEditUI();
+}
+
+// Phase vocoder time-stretch
+function fft(real, imag) {
+  const n = real.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      [real[i], real[j]] = [real[j], real[i]];
+      [imag[i], imag[j]] = [imag[j], imag[i]];
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    const wlen_cos = Math.cos(ang), wlen_sin = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let w_real = 1, w_imag = 0;
+      for (let j = 0; j < len / 2; j++) {
+        const u_real = real[i+j], u_imag = imag[i+j];
+        const v_real = real[i+j+len/2] * w_real - imag[i+j+len/2] * w_imag;
+        const v_imag = real[i+j+len/2] * w_imag + imag[i+j+len/2] * w_real;
+        real[i+j] = u_real + v_real;
+        imag[i+j] = u_imag + v_imag;
+        real[i+j+len/2] = u_real - v_real;
+        imag[i+j+len/2] = u_imag - v_imag;
+        const next_w_real = w_real * wlen_cos - w_imag * wlen_sin;
+        w_imag = w_real * wlen_sin + w_imag * wlen_cos;
+        w_real = next_w_real;
+      }
+    }
+  }
+}
+
+function ifft(real, imag) {
+  const n = real.length;
+  fft(imag, real);
+  for (let i = 0; i < n; i++) {
+    real[i] /= n;
+    imag[i] /= n;
+  }
+}
+
+function phaseVocoder(inputBuffer, ratio) {
+  const sr = inputBuffer.sampleRate;
+  const ch = inputBuffer.numberOfChannels;
+  const len = inputBuffer.length;
+
+  // Mono mixdown for processing
+  const input = new Float32Array(len);
+  for (let i = 0; i < len; i++) {
+    let s = 0;
+    for (let c = 0; c < ch; c++) s += inputBuffer.getChannelData(c)[i];
+    input[i] = s / ch;
+  }
+
+  const W = 2048;
+  const H = 512;
+  const outputLen = Math.max(1, Math.floor(len * ratio));
+  const out = new Float32Array(outputLen);
+
+  const hann = new Float32Array(W);
+  for (let i = 0; i < W; i++) hann[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (W - 1));
+
+  const numFrames = Math.max(1, Math.floor((len - W) / H) + 1);
+
+  // Analyze
+  const frames = [];
+  for (let f = 0; f < numFrames; f++) {
+    const real = new Float32Array(W);
+    const imag = new Float32Array(W);
+    const off = f * H;
+    for (let i = 0; i < W; i++) {
+      if (off + i < len) real[i] = input[off + i] * hann[i];
+    }
+    fft(real, imag);
+    const mags = new Float32Array(W);
+    const phases = new Float32Array(W);
+    for (let i = 0; i < W; i++) {
+      mags[i] = Math.sqrt(real[i]*real[i] + imag[i]*imag[i]);
+      phases[i] = Math.atan2(imag[i], real[i]);
+    }
+    frames.push({ mags, phases });
+  }
+
+  // Synthesize
+  const outPhases = new Float32Array(W);
+  let prevAnaPhases = new Float32Array(W);
+  const omega = new Float32Array(W);
+  for (let i = 0; i < W; i++) omega[i] = 2 * Math.PI * H * i / W;
+
+  const numSynthFrames = Math.max(1, Math.floor((outputLen - W) / H) + 1);
+
+  for (let sf = 0; sf < numSynthFrames; sf++) {
+    const af = sf / ratio;
+    const f0 = Math.floor(af);
+    const frac = af - f0;
+
+    const mags = new Float32Array(W);
+    const phases = new Float32Array(W);
+
+    if (f0 >= 0 && f0 + 1 < numFrames) {
+      for (let i = 0; i < W; i++) {
+        mags[i] = frames[f0].mags[i] * (1 - frac) + frames[f0+1].mags[i] * frac;
+        phases[i] = frames[f0].phases[i] * (1 - frac) + frames[f0+1].phases[i] * frac;
+      }
+    } else if (f0 >= 0 && f0 < numFrames) {
+      for (let i = 0; i < W; i++) {
+        mags[i] = frames[f0].mags[i];
+        phases[i] = frames[f0].phases[i];
+      }
+    } else {
+      continue;
+    }
+
+    // Phase vocoder propagation
+    for (let i = 0; i < W; i++) {
+      let delta = phases[i] - prevAnaPhases[i];
+      delta -= omega[i];
+      while (delta > Math.PI) delta -= 2 * Math.PI;
+      while (delta < -Math.PI) delta += 2 * Math.PI;
+      outPhases[i] += omega[i] + delta;
+      prevAnaPhases[i] = phases[i];
+    }
+
+    // Convert to time domain
+    const real = new Float32Array(W);
+    const imag = new Float32Array(W);
+    for (let i = 0; i < W; i++) {
+      real[i] = mags[i] * Math.cos(outPhases[i]);
+      imag[i] = mags[i] * Math.sin(outPhases[i]);
+    }
+    ifft(real, imag);
+
+    // Overlap-add
+    const off = sf * H;
+    for (let i = 0; i < W; i++) {
+      if (off + i < outputLen) out[off + i] += real[i] * hann[i];
+    }
+  }
+
+  // Normalize
+  let max = 0;
+  for (let i = 0; i < outputLen; i++) max = Math.max(max, Math.abs(out[i]));
+  if (max > 0.95) {
+    const scale = 0.95 / max;
+    for (let i = 0; i < outputLen; i++) out[i] *= scale;
+  }
+
+  const outBuf = audioCtx.createBuffer(ch, outputLen, sr);
+  for (let c = 0; c < ch; c++) {
+    const cd = outBuf.getChannelData(c);
+    for (let i = 0; i < outputLen; i++) cd[i] = out[i];
+  }
+  return outBuf;
 }
 
 // UI: build sequencer grid
@@ -659,13 +911,32 @@ function initAudio() {
   $('#status').textContent = 'Audio ready';
 }
 
-function triggerPad(index, when = null) {
+function triggerPad(index, when = null, sliceIndex = null) {
   if (!isAudioStarted) return;
-  const buf = buffers[index];
+  const settings = padSettings[index];
+  const buf = settings.stretchedBuffer || buffers[index];
   if (!buf) return;
   const t = when == null ? audioCtx.currentTime : when;
   const src = audioCtx.createBufferSource();
   src.buffer = buf;
+
+  // Apply pitch
+  const rate = Math.pow(2, (settings.pitchSemitones + settings.pitchFine / 100) / 12);
+  src.playbackRate.value = rate;
+
+  // Apply chop/slice
+  if (settings.chopMode && settings.slices.length > 0) {
+    let slice;
+    if (sliceIndex !== null && sliceIndex >= 0 && sliceIndex < settings.slices.length) {
+      slice = settings.slices[sliceIndex];
+    } else {
+      slice = settings.slices[Math.floor(Math.random() * settings.slices.length)];
+    }
+    src.loop = true;
+    src.loopStart = slice.start / buf.sampleRate;
+    src.loopEnd = slice.end / buf.sampleRate;
+  }
+
   src.connect(masterGain);
   src.start(t);
 
@@ -682,6 +953,17 @@ function triggerPad(index, when = null) {
   setTimeout(() => pad.classList.remove('playing'), 120);
 }
 
+function triggerPadSlice(index) {
+  const settings = padSettings[index];
+  if (!settings.chopMode || settings.slices.length === 0) {
+    triggerPad(index);
+    return;
+  }
+  // Trigger a random slice
+  const sliceIdx = Math.floor(Math.random() * settings.slices.length);
+  triggerPad(index, null, sliceIdx);
+}
+
 // File loading
 $('#fileInput').addEventListener('change', async (e) => {
   if (!isAudioStarted) initAudio();
@@ -690,6 +972,7 @@ $('#fileInput').addEventListener('change', async (e) => {
     const ab = await files[i].arrayBuffer();
     const buf = await audioCtx.decodeAudioData(ab);
     buffers[i] = buf;
+    padSettings[i].stretchedBuffer = null; // clear derived buffer
     $(`#slot${i}`).textContent = files[i].name.slice(0, 14);
   }
 });
@@ -768,6 +1051,55 @@ $('#btnPlaySong').addEventListener('click', () => {
   $('#btnPlaySong').textContent = 'Stop Song';
   scheduler();
 });
+
+// Resample master output to a pad
+async function resampleMaster() {
+  if (!isAudioStarted) { alert('Start audio first'); return; }
+  const duration = parseFloat(prompt('Resample duration in seconds:', '4')) || 4;
+  const target = parseInt(prompt('Target pad (1-16):', '1')) || 1;
+  const targetPad = Math.max(1, Math.min(16, target)) - 1;
+
+  await audioCtx.resume();
+  const sampleRate = audioCtx.sampleRate;
+  const numSamples = Math.floor(duration * sampleRate);
+  const recorded = new Float32Array(numSamples);
+  let idx = 0;
+
+  const spn = audioCtx.createScriptProcessor(4096, 1, 1);
+  const zeroGain = audioCtx.createGain();
+  zeroGain.gain.value = 0;
+  spn.connect(zeroGain);
+  zeroGain.connect(audioCtx.destination);
+  masterGain.connect(spn);
+
+  $('#status').textContent = `Resampling ${duration}s to pad ${targetPad+1}...`;
+
+  return new Promise((resolve) => {
+    spn.onaudioprocess = (e) => {
+      const input = e.inputBuffer.getChannelData(0);
+      for (let i = 0; i < input.length && idx < numSamples; i++) {
+        recorded[idx++] = input[i];
+      }
+      if (idx >= numSamples) {
+        spn.disconnect();
+        zeroGain.disconnect();
+        masterGain.disconnect(spn);
+
+        const buf = audioCtx.createBuffer(1, numSamples, sampleRate);
+        buf.getChannelData(0).set(recorded);
+        buffers[targetPad] = buf;
+        padSettings[targetPad].stretchedBuffer = null;
+        padSettings[targetPad].slices = [];
+        padSettings[targetPad].chopMode = false;
+        $(`#slot${targetPad}`).textContent = 'resampled';
+        $('#status').textContent = `Resampled to pad ${targetPad+1}`;
+        resolve();
+      }
+    };
+  });
+}
+
+$('#btnResample').addEventListener('click', resampleMaster);
 
 function scheduler() {
   while (nextNoteTime < audioCtx.currentTime + scheduleAheadTime) {
@@ -906,10 +1238,12 @@ async function exportWAV() {
     for (let r = 0; r < 4; r++) {
       const stepData = bankPattern[r][step];
       if (stepData.active && Math.random() < stepData.prob) {
-        const buf = buffers[r];
+        const buf = padSettings[r].stretchedBuffer || buffers[r];
         if (buf) {
           const src = offlineCtx.createBufferSource();
           src.buffer = buf;
+          const rate = Math.pow(2, (padSettings[r].pitchSemitones + padSettings[r].pitchFine / 100) / 12);
+          src.playbackRate.value = rate;
           src.connect(og);
           src.start(t);
         }
@@ -998,6 +1332,44 @@ $('#limiter').addEventListener('input', (e) => {
   }
 });
 
+// Pad Edit event listeners
+$('#pitchSemi').addEventListener('input', (e) => {
+  if (selectedPad < 0) return;
+  padSettings[selectedPad].pitchSemitones = parseInt(e.target.value) || 0;
+});
+$('#pitchFine').addEventListener('input', (e) => {
+  if (selectedPad < 0) return;
+  padSettings[selectedPad].pitchFine = parseInt(e.target.value) || 0;
+});
+$('#btnChop').addEventListener('click', () => {
+  if (selectedPad < 0) return;
+  padSettings[selectedPad].chopMode = !padSettings[selectedPad].chopMode;
+  updatePadEditUI();
+});
+$('#btnAutoSlice').addEventListener('click', () => {
+  if (selectedPad < 0) return;
+  autoSlice(selectedPad, 8);
+});
+$('#btnStretch').addEventListener('click', async () => {
+  if (selectedPad < 0 || !buffers[selectedPad]) return;
+  const ratio = parseFloat($('#stretchRatio').value) || 1;
+  if (ratio < 0.5 || ratio > 2) return;
+  $('#status').textContent = 'Stretching...';
+  padSettings[selectedPad].stretchRatio = ratio;
+  setTimeout(() => {
+    padSettings[selectedPad].stretchedBuffer = phaseVocoder(buffers[selectedPad], ratio);
+    $('#status').textContent = 'Stretch applied';
+    updatePadEditUI();
+  }, 50);
+});
+$('#btnResetStretch').addEventListener('click', () => {
+  if (selectedPad < 0) return;
+  padSettings[selectedPad].stretchedBuffer = null;
+  padSettings[selectedPad].stretchRatio = 1;
+  $('#stretchRatio').value = 1;
+  updatePadEditUI();
+});
+
 // Save / Load via IndexedDB
 $('#btnSave').addEventListener('click', async () => {
   try {
@@ -1012,6 +1384,13 @@ $('#btnSave').addEventListener('click', async () => {
     }
     await dbPut('patterns', 'banks', JSON.stringify(patterns));
     await dbPut('songs', 'default', JSON.stringify(songChain));
+    await dbPut('patterns', 'padSettings', JSON.stringify(padSettings.map(s => ({
+      pitchSemitones: s.pitchSemitones,
+      pitchFine: s.pitchFine,
+      slices: s.slices,
+      stretchRatio: s.stretchRatio,
+      chopMode: s.chopMode
+    }))));
     $('#status').textContent = 'Set saved to browser';
   } catch (err) { $('#status').textContent = 'Save failed'; }
 });
@@ -1047,6 +1426,20 @@ $('#btnLoad').addEventListener('click', async () => {
         slot.classList.toggle('empty', !songChain[i]);
       });
     }
+    const savedPadSettings = await dbGet('patterns', 'padSettings');
+    if (savedPadSettings) {
+      const parsed = JSON.parse(savedPadSettings);
+      for (let i = 0; i < PADS; i++) {
+        if (parsed[i]) {
+          padSettings[i].pitchSemitones = parsed[i].pitchSemitones || 0;
+          padSettings[i].pitchFine = parsed[i].pitchFine || 0;
+          padSettings[i].slices = parsed[i].slices || [];
+          padSettings[i].stretchRatio = parsed[i].stretchRatio || 1;
+          padSettings[i].chopMode = parsed[i].chopMode || false;
+          padSettings[i].stretchedBuffer = null;
+        }
+      }
+    }
     for (let i = 0; i < PADS; i++) {
       const wav = await dbGet('samples', 'pad_' + i);
       if (wav) {
@@ -1054,9 +1447,17 @@ $('#btnLoad').addEventListener('click', async () => {
         const buf = await audioCtx.decodeAudioData(ab);
         buffers[i] = buf;
         $(`#slot${i}`).textContent = 'saved';
+        // Re-apply stretch if needed
+        if (padSettings[i].stretchRatio !== 1 && padSettings[i].stretchRatio >= 0.5 && padSettings[i].stretchRatio <= 2) {
+          setTimeout(() => {
+            padSettings[i].stretchedBuffer = phaseVocoder(buffers[i], padSettings[i].stretchRatio);
+            updatePadEditUI();
+          }, 100 + i * 50);
+        }
       }
     }
     $('#status').textContent = 'Set loaded';
+    updatePadEditUI();
   } catch (err) { $('#status').textContent = 'Load failed'; }
 });
 
@@ -1070,15 +1471,29 @@ window.addEventListener('drop', async (e) => {
     const ab = await files[i].arrayBuffer();
     const buf = await audioCtx.decodeAudioData(ab);
     buffers[i] = buf;
+    padSettings[i].stretchedBuffer = null;
     $(`#slot${i}`).textContent = files[i].name.slice(0, 14);
   }
 });
 
-// Keyboard shortcuts: 1-8 trigger pads 0-7
+// Keyboard shortcuts
 const shortcutOverlay = $('#shortcutOverlay');
 window.addEventListener('keydown', (e) => {
   if (e.key === '?') { e.preventDefault(); shortcutOverlay.classList.toggle('active'); }
-  if (e.key >= '1' && e.key <= '8') triggerPad(+e.key - 1);
+  if (e.key >= '1' && e.key <= '8') {
+    if (e.shiftKey) {
+      e.preventDefault();
+      selectPad(+e.key - 1);
+    } else {
+      triggerPad(+e.key - 1);
+    }
+  }
+  const sliceKeys = ['q','w','e','r','t','y','u','i'];
+  const idx = sliceKeys.indexOf(e.key.toLowerCase());
+  if (idx >= 0 && idx < 8) {
+    e.preventDefault();
+    triggerPadSlice(idx);
+  }
   if (e.key === ' ') { e.preventDefault(); $('#btnPlaySeq').click(); }
   if (e.key === 'r' || e.key === 'R') { e.preventDefault(); $('#btnRecSeq').click(); }
 });
