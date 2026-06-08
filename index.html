@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0a0a12">
+<title>TapeLoop</title>
+<link rel="manifest" href="manifest.json">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a12;color:#e0e0e0;font-family:'Courier New',monospace;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:2rem}
+h1{color:#ff00ff;text-shadow:0 0 20px #ff00ff;margin-bottom:1rem;font-size:2.5rem}
+#pads{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin:1rem 0}
+.pad{width:100px;height:100px;background:#1a1a2e;border:2px solid #333;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:all .1s;font-size:.8rem;text-align:center;padding:.5rem;position:relative}
+.pad:hover{border-color:#ff00ff}
+.pad.active{background:#ff00ff;color:#000;border-color:#ff00ff}
+.pad.loaded{border-color:#00ffff}
+.pad.dragover{background:#2a2a4e;border-color:#ff00ff;transform:scale(1.05)}
+.pad .pad-number{font-size:1.2rem;font-weight:bold;margin-bottom:.2rem}
+.pad .pad-name{font-size:.65rem;color:#888;max-width:90%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pad .export-btn{position:absolute;top:4px;right:4px;background:transparent;border:none;color:#00ffff;font-size:.7rem;cursor:pointer;padding:2px;opacity:.6;transition:opacity .2s}
+.pad .export-btn:hover{opacity:1}
+.pad .midi-note{position:absolute;bottom:4px;left:4px;font-size:.6rem;color:#888}
+#controls{display:flex;gap:2rem;align-items:center;margin:1rem 0;flex-wrap:wrap;justify-content:center}
+.knob-group{display:flex;flex-direction:column;align-items:center;gap:.3rem}
+label{color:#888;font-size:.75rem;text-transform:uppercase}
+input[type=range]{width:120px}
+button{background:#1a1a2e;border:2px solid #ff00ff;color:#ff00ff;padding:.5rem 1.5rem;font-family:inherit;cursor:pointer;font-size:1rem}
+button:hover{background:#ff00ff;color:#000}
+button:disabled{opacity:.3;cursor:not-allowed}
+button.active-learn{background:#ff00ff;color:#000;animation:pulse .5s infinite alternate}
+@keyframes pulse{from{box-shadow:0 0 5px #ff00ff}to{box-shadow:0 0 20px #ff00ff}}
+#sequencer{display:grid;grid-template-columns:repeat(16,1fr);gap:3px;margin:1rem 0}
+.step{width:30px;height:30px;background:#1a1a2e;border:1px solid #333;cursor:pointer}
+.step.active{background:#00ffff}
+.step.current{border-color:#ff00ff}
+#bpm{display:flex;align-items:center;gap:1rem}
+.pattern-controls{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.pattern-controls select{background:#1a1a2e;border:2px solid #ff00ff;color:#ff00ff;padding:.3rem;font-family:inherit}
+#visualizer{width:100%;max-width:600px;height:100px;background:#000;border:1px solid #333;margin:1rem 0}
+#status{color:#888;font-size:.8rem;margin-top:.5rem;min-height:1.2rem;text-align:center}
+
+/* MIDI section styles */
+#midi-section{display:flex;gap:1rem;align-items:center;flex-wrap:wrap;justify-content:center;margin:.5rem 0;padding:.5rem;border:1px solid #333;border-radius:8px;background:#111}
+#midi-status{font-size:.75rem;color:#888}
+#midi-status.connected{color:#00ffff}
+#midi-status.error{color:#ff4444}
+
+/* Effects section */
+#effects-section{display:flex;gap:1.5rem;align-items:center;flex-wrap:wrap;justify-content:center;margin:.5rem 0;padding:.5rem;border:1px solid #333;border-radius:8px;background:#111}
+.effect-group{display:flex;flex-direction:column;align-items:center;gap:.3rem}
+.effect-group label{color:#00ffff;font-size:.7rem}
+</style>
+</head>
+<body>
+<h1>🎛️ TAPELOOP</h1>
+
+<!-- MIDI Controls -->
+<div id="midi-section">
+  <span id="midi-status">MIDI: not connected</span>
+  <button id="midiLearnBtn">MIDI LEARN</button>
+  <button id="midiResetBtn">RESET MAPPING</button>
+</div>
+
+<div id="controls">
+  <button id="playBtn">▶ PLAY</button>
+  <button id="recBtn">● REC</button>
+  <button id="exportWavBtn">💾 EXPORT WAV</button>
+  <button id="installBtn" style="display:none">📲 INSTALL APP</button>
+  <div id="bpm"><label>BPM</label><input type="range" id="bpmSlider" min="60" max="180" value="120"><span id="bpmVal">120</span><button id="tapBtn">TAP</button></div>
+  <div class="pattern-controls">
+    <button id="savePatternBtn">SAVE PATTERN</button>
+    <button id="loadPatternBtn">LOAD PATTERN</button>
+    <select id="patternSelect"><option value="">-- select pattern --</option></select>
+    <button id="deletePatternBtn">DEL</button>
+    <button id="exportPatternBtn">EXPORT JSON</button>
+    <button id="importPatternBtn">IMPORT JSON</button>
+    <input type="file" id="importPatternFile" accept=".json" style="display:none">
+  </div>
+</div>
+
+<!-- Effects -->
+<div id="effects-section">
+  <div class="knob-group"><label>Wobble</label><input type="range" id="wobble" min="0" max="100" value="20"></div>
+  <div class="knob-group"><label>Crush</label><input type="range" id="crush" min="0" max="100" value="30"></div>
+  <div class="knob-group"><label>Filter</label><input type="range" id="filter" min="100" max="5000" value="2000"></div>
+  <div class="knob-group"><label>Resonance</label><input type="range" id="resonance" min="0" max="30" value="1"></div>
+  <div class="effect-group"><label>Delay Time</label><input type="range" id="delayTime" min="0" max="100" value="0"></div>
+  <div class="effect-group"><label>Delay FB</label><input type="range" id="delayFeedback" min="0" max="90" value="30"></div>
+  <div class="effect-group"><label>Delay Mix</label><input type="range" id="delayMix" min="0" max="100" value="30"></div>
+  <div class="effect-group"><label>Chorus Rate</label><input type="range" id="chorusRate" min="0" max="100" value="0"></div>
+  <div class="effect-group"><label>Chorus Depth</label><input type="range" id="chorusDepth" min="0" max="100" value="50"></div>
+  <div class="effect-group"><label>Chorus Mix</label><input type="range" id="chorusMix" min="0" max="100" value="30"></div>
+  <div class="effect-group"><label>Comp Thr</label><input type="range" id="compThreshold" min="-60" max="0" value="-24"></div>
+  <div class="effect-group"><label>Comp Ratio</label><input type="range" id="compRatio" min="1" max="20" value="4"></div>
+  <div class="effect-group"><label>Comp Gain</label><input type="range" id="compGain" min="0" max="20" value="6"></div>
+</div>
+
+<div id="pads"></div>
+<div id="sequencer"></div>
+<canvas id="visualizer"></canvas>
+<div id="status">Click a pad to load a sample. Press 1-8 to trigger.</div>
+
+<script>
+const audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+const masterGain = audioCtx.createGain();
+masterGain.gain.value = 0.8;
+masterGain.connect(audioCtx.destination);
+let samples = Array(8).fill(null);
+let sampleNames = Array(8).fill('');
+let sequencer = Array(16).fill(false);
+let currentStep = 0;
+let isPlaying = false;
+let bpm = 120;
+let nextNoteTime = 0;
+let timerID = null;
+
+// ========== MIDI STATE ==========
+let midiAccess = null;
+let midiMap = {}; // noteNumber -> padIndex
+let midiLearnMode = false;
+let selectedPad = 0;
+let midiLearnTimeout = null;
+const MIDI_STORAGE_KEY = 'tapeloop_midi_map';
+
+// Default MIDI mapping: C2=36 through G2=43 map to pads 0-7
+function getDefaultMidiMap(){
+  const map = {};
+  for(let i=0;i<8;i++) map[36+i] = i;
+  return map;
+}
+
+function loadMidiMap(){
+  try{
+    const stored = localStorage.getItem(MIDI_STORAGE_KEY);
+    if(stored) midiMap = JSON.parse(stored);
+    else midiMap = getDefaultMidiMap();
+  }catch(e){ midiMap = getDefaultMidiMap(); }
+}
+
+function saveMidiMap(){
+  localStorage.setItem(MIDI_STORAGE_KEY, JSON.stringify(midiMap));
+}
+
+function updateMidiDisplay(){
+  document.querySelectorAll('.pad').forEach((pad,idx)=>{
+    const noteEl = pad.querySelector('.midi-note');
+    if(noteEl){
+      const notes = Object.keys(midiMap).filter(n=>midiMap[n]===idx);
+      noteEl.textContent = notes.length ? 'MIDI:'+notes.join(',') : '';
+    }
+  });
+}
+
+// ========== PAD CREATION ==========
+const padsDiv = document.getElementById('pads');
+for(let i=0;i<8;i++){
+  const pad = document.createElement('div');
+  pad.className='pad';
+  pad.dataset.index = i;
+
+  const num = document.createElement('span');
+  num.className='pad-number';
+  num.textContent = i+1;
+  pad.appendChild(num);
+
+  const name = document.createElement('span');
+  name.className='pad-name';
+  name.textContent = 'Empty';
+  pad.appendChild(name);
+
+  // Export button
+  const exportBtn = document.createElement('button');
+  exportBtn.className='export-btn';
+  exportBtn.textContent = '⬇';
+  exportBtn.title = 'Export this pad as WAV';
+  exportBtn.onclick = (e)=>{ e.stopPropagation(); exportPadWav(i); };
+  pad.appendChild(exportBtn);
+
+  // MIDI note display
+  const midiNote = document.createElement('span');
+  midiNote.className='midi-note';
+  pad.appendChild(midiNote);
+
+  pad.onclick = ()=>{ selectedPad = i; triggerPad(i); };
+  const fileInput = document.createElement('input');
+  fileInput.type='file';
+  fileInput.accept='audio/*';
+  fileInput.style.display='none';
+  fileInput.onchange = (e)=>loadSample(i,e.target.files[0]);
+  pad.appendChild(fileInput);
+  pad.ondblclick = ()=>fileInput.click();
+
+  // Drag and drop
+  pad.ondragover = (e)=>{e.preventDefault();pad.classList.add('dragover');};
+  pad.ondragleave = ()=>pad.classList.remove('dragover');
+  pad.ondrop = (e)=>{
+    e.preventDefault();
+    pad.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if(file&&file.type.startsWith('audio/'))loadSample(i,file);
+    else updateStatus('Drop an audio file');
+  };
+
+  padsDiv.appendChild(pad);
+}
+
+// ========== SEQUENCER CREATION ==========
+const seqDiv = document.getElementById('sequencer');
+for(let i=0;i<16;i++){
+  const step = document.createElement('div');
+  step.className='step';
+  step.onclick = ()=>{sequencer[i]=!sequencer[i];step.classList.toggle('active');};
+  seqDiv.appendChild(step);
+}
+
+function loadSample(idx,file){
+  if(!file)return;
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    audioCtx.decodeAudioData(e.target.result,(buffer)=>{
+      samples[idx]=buffer;
+      sampleNames[idx]=file.name;
+      const pad = document.querySelectorAll('.pad')[idx];
+      pad.classList.add('loaded');
+      pad.querySelector('.pad-name').textContent = file.name;
+      updateStatus(`Loaded sample ${idx+1}: ${file.name}`);
+    });
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function triggerPad(idx){
+  if(!samples[idx]){updateStatus(`Pad ${idx+1} empty — double-click to load`);return;}
+  const src = audioCtx.createBufferSource();
+  src.buffer = samples[idx];
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0.8;
+  src.connect(gain);
+  applyEffects(gain);
+  src.start();
+  const pad = document.querySelectorAll('.pad')[idx];
+  pad.classList.add('active');
+  setTimeout(()=>pad.classList.remove('active'),100);
+}
+
+// ========== EFFECTS CHAIN ==========
+function applyEffects(node, destination = masterGain){
+  const wobble = document.getElementById('wobble').value/100;
+  const crush = document.getElementById('crush').value/100;
+  const filterFreq = document.getElementById('filter').value;
+  const delayTimeVal = document.getElementById('delayTime').value/100;
+  const delayFeedbackVal = document.getElementById('delayFeedback').value/100;
+  const delayMixVal = document.getElementById('delayMix').value/100;
+  const chorusRateVal = document.getElementById('chorusRate').value/100;
+  const chorusDepthVal = document.getElementById('chorusDepth').value/100;
+  const chorusMixVal = document.getElementById('chorusMix').value/100;
+  const compThresholdVal = parseFloat(document.getElementById('compThreshold').value);
+  const compRatioVal = parseFloat(document.getElementById('compRatio').value);
+  const compGainVal = parseFloat(document.getElementById('compGain').value);
+
+  let currentNode = node;
+
+  // 1. Compressor
+  const compressor = audioCtx.createDynamicsCompressor();
+  compressor.threshold.value = compThresholdVal;
+  compressor.ratio.value = compRatioVal;
+  compressor.knee.value = 5;
+  compressor.attack.value = 0.01;
+  compressor.release.value = 0.1;
+  currentNode.connect(compressor);
+  currentNode = compressor;
+
+  // Makeup gain after compressor
+  const makeupGain = audioCtx.createGain();
+  makeupGain.gain.value = Math.pow(10, compGainVal/20);
+  currentNode.connect(makeupGain);
+  currentNode = makeupGain;
+
+  // 2. Lowpass filter with resonance
+  const filter = audioCtx.createBiquadFilter();
+  filter.type='lowpass';
+  filter.frequency.value = filterFreq;
+  filter.Q.value = parseFloat(document.getElementById('resonance').value);
+  currentNode.connect(filter);
+  currentNode = filter;
+
+  // 3. Chorus (pitch modulation using delay + LFO)
+  if(chorusRateVal > 0){
+    const chorusInput = audioCtx.createGain();
+    chorusInput.gain.value = 1;
+    currentNode.connect(chorusInput);
+
+    // Dry path
+    const dryGain = audioCtx.createGain();
+    dryGain.gain.value = 1 - chorusMixVal;
+    chorusInput.connect(dryGain);
+
+    // Wet path
+    const wetGain = audioCtx.createGain();
+    wetGain.gain.value = chorusMixVal;
+
+    const chorusDelay = audioCtx.createDelay();
+    chorusDelay.delayTime.value = 0.02; // 20ms base delay
+
+    const lfo = audioCtx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 0.5 + chorusRateVal * 4.5; // 0.5Hz to 5Hz
+
+    const lfoGain = audioCtx.createGain();
+    lfoGain.gain.value = chorusDepthVal * 0.01; // 0 to 10ms modulation
+
+    lfo.connect(lfoGain);
+    lfoGain.connect(chorusDelay.delayTime);
+    lfo.start();
+
+    chorusInput.connect(chorusDelay);
+    chorusDelay.connect(wetGain);
+
+    // Mix dry + wet back together
+    const chorusMixGain = audioCtx.createGain();
+    chorusMixGain.gain.value = 1;
+    dryGain.connect(chorusMixGain);
+    wetGain.connect(chorusMixGain);
+    currentNode = chorusMixGain;
+  }
+
+  // 4. Delay with feedback and mix
+  if(delayTimeVal > 0){
+    const delayInput = audioCtx.createGain();
+    delayInput.gain.value = 1;
+    currentNode.connect(delayInput);
+
+    // Dry path
+    const dryGain = audioCtx.createGain();
+    dryGain.gain.value = 1 - delayMixVal;
+    delayInput.connect(dryGain);
+
+    // Wet path
+    const wetGain = audioCtx.createGain();
+    wetGain.gain.value = delayMixVal;
+
+    const delayNode = audioCtx.createDelay();
+    delayNode.delayTime.value = delayTimeVal * 2; // 0 to 2 seconds
+
+    const feedbackGain = audioCtx.createGain();
+    feedbackGain.gain.value = delayFeedbackVal;
+
+    delayInput.connect(delayNode);
+    delayNode.connect(feedbackGain);
+    feedbackGain.connect(delayNode); // feedback loop
+    delayNode.connect(wetGain);
+
+    // Mix dry + wet back together
+    const delayMixGain = audioCtx.createGain();
+    delayMixGain.gain.value = 1;
+    dryGain.connect(delayMixGain);
+    wetGain.connect(delayMixGain);
+    currentNode = delayMixGain;
+  }
+
+  // 5. Connect to analyser for visualizer
+  currentNode.connect(analyser);
+
+  // 6. Bitcrush (downsample)
+  if(crush>0){
+    const bufferSize = 4096;
+    const crusher = audioCtx.createScriptProcessor(bufferSize,1,1);
+    let bits = Math.max(1,16-crush*14);
+    crusher.onaudioprocess = (e)=>{
+      const input = e.inputBuffer.getChannelData(0);
+      const output = e.outputBuffer.getChannelData(0);
+      const step = Math.pow(0.5,bits);
+      for(let i=0;i<bufferSize;i++){
+        output[i] = Math.floor(input[i]/step+0.5)*step;
+      }
+    };
+    currentNode.connect(crusher);
+    crusher.connect(destination);
+  }else{
+    currentNode.connect(destination);
+  }
+}
+
+// ========== SCHEDULER ==========
+function schedule(){
+  const secondsPerBeat = 60.0/bpm;
+  const secondsPerStep = secondsPerBeat/4;
+  while(nextNoteTime<audioCtx.currentTime+0.1){
+    if(sequencer[currentStep]){
+      const src = audioCtx.createBufferSource();
+      src.buffer = samples[0];
+      if(src.buffer){
+        const gain = audioCtx.createGain();
+        gain.gain.value = 0.6;
+        src.connect(gain);
+        applyEffects(gain);
+        src.start(nextNoteTime);
+      }
+    }
+    // Update visual
+    document.querySelectorAll('.step').forEach((s,i)=>s.classList.toggle('current',i===currentStep));
+    currentStep = (currentStep+1)%16;
+    nextNoteTime += secondsPerStep;
+  }
+  timerID = requestAnimationFrame(schedule);
+}
+
+document.getElementById('playBtn').onclick = ()=>{
+  if(audioCtx.state==='suspended')audioCtx.resume();
+  isPlaying = !isPlaying;
+  document.getElementById('playBtn').textContent = isPlaying?'⏹ STOP':'▶ PLAY';
+  if(isPlaying){
+    nextNoteTime = audioCtx.currentTime+0.05;
+    schedule();
+  }else{
+    cancelAnimationFrame(timerID);
+    document.querySelectorAll('.step').forEach(s=>s.classList.remove('current'));
+  }
+};
+
+// ========== RECORDING ==========
+let mediaRecorder = null;
+let recordedChunks = [];
+document.getElementById('recBtn').onclick = async ()=>{
+  if(mediaRecorder&&mediaRecorder.state==='recording'){
+    mediaRecorder.stop();
+    document.getElementById('recBtn').textContent='● REC';
+    return;
+  }
+  const dest = audioCtx.createMediaStreamDestination();
+  // Connect master to dest for recording
+  masterGain.connect(dest);
+  const stream = dest.stream;
+  mediaRecorder = new MediaRecorder(stream);
+  recordedChunks = [];
+  mediaRecorder.ondataavailable = (e)=>{if(e.data.size>0)recordedChunks.push(e.data);};
+  mediaRecorder.onstop = ()=>{
+    masterGain.disconnect(dest);
+    const blob = new Blob(recordedChunks,{type:'audio/webm'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'tapeloop-mix.webm';
+    a.click();
+  };
+  mediaRecorder.start();
+  document.getElementById('recBtn').textContent='⏹ STOP';
+  updateStatus('Recording...');
+};
+
+// ========== BPM & TAP TEMPO ==========
+document.getElementById('bpmSlider').oninput = (e)=>{
+  bpm = parseInt(e.target.value);
+  document.getElementById('bpmVal').textContent = bpm;
+};
+
+let tapTimes = [];
+document.getElementById('tapBtn').onclick = ()=>{
+  const now = Date.now();
+  tapTimes.push(now);
+  if(tapTimes.length>4)tapTimes.shift();
+  if(tapTimes.length>=2){
+    let intervals = [];
+    for(let i=1;i<tapTimes.length;i++)intervals.push(tapTimes[i]-tapTimes[i-1]);
+    const avgInterval = intervals.reduce((a,b)=>a+b,0)/intervals.length;
+    const newBpm = Math.round(60000/avgInterval);
+    if(newBpm>=60&&newBpm<=180){
+      bpm = newBpm;
+      document.getElementById('bpmSlider').value = bpm;
+      document.getElementById('bpmVal').textContent = bpm;
+      updateStatus(`Tapped BPM: ${bpm}`);
+    }
+  }
+};
+
+// ========== PATTERN SAVE/LOAD ==========
+const PATTERN_KEY = 'tapeloop_patterns';
+function getPatterns(){
+  try{return JSON.parse(localStorage.getItem(PATTERN_KEY))||{};}catch(e){return {};}
+}
+function savePatterns(patterns){
+  localStorage.setItem(PATTERN_KEY,JSON.stringify(patterns));
+}
+function updatePatternSelect(){
+  const select = document.getElementById('patternSelect');
+  const patterns = getPatterns();
+  select.innerHTML = '<option value="">-- select pattern --</option>';
+  Object.keys(patterns).forEach(name=>{
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    select.appendChild(opt);
+  });
+}
+document.getElementById('savePatternBtn').onclick = ()=>{
+  const name = prompt('Pattern name:');
+  if(!name)return;
+  const patterns = getPatterns();
+  patterns[name] = {sequencer:[...sequencer],bpm};
+  savePatterns(patterns);
+  updatePatternSelect();
+  updateStatus(`Saved pattern: ${name}`);
+};
+document.getElementById('loadPatternBtn').onclick = ()=>{
+  const name = document.getElementById('patternSelect').value;
+  if(!name){updateStatus('Select a pattern first');return;}
+  const patterns = getPatterns();
+  const p = patterns[name];
+  if(!p){updateStatus('Pattern not found');return;}
+  sequencer = [...p.sequencer];
+  bpm = p.bpm||120;
+  document.getElementById('bpmSlider').value = bpm;
+  document.getElementById('bpmVal').textContent = bpm;
+  document.querySelectorAll('.step').forEach((s,i)=>s.classList.toggle('active',sequencer[i]));
+  updateStatus(`Loaded pattern: ${name}`);
+};
+document.getElementById('deletePatternBtn').onclick = ()=>{
+  const name = document.getElementById('patternSelect').value;
+  if(!name)return;
+  const patterns = getPatterns();
+  delete patterns[name];
+  savePatterns(patterns);
+  updatePatternSelect();
+  updateStatus(`Deleted pattern: ${name}`);
+};
+
+// Export pattern to JSON file
+document.getElementById('exportPatternBtn').onclick = ()=>{
+  const name = document.getElementById('patternSelect').value;
+  if(!name){updateStatus('Select a pattern to export');return;}
+  const patterns = getPatterns();
+  const pattern = patterns[name];
+  if(!pattern){updateStatus('Pattern not found');return;}
+  const exportData = {
+    name: name,
+    version: '1.0',
+    created: new Date().toISOString(),
+    pattern: pattern
+  };
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `tapeloop-pattern-${name}.json`;
+  a.click();
+  updateStatus(`Exported pattern "${name}" to JSON`);
+};
+
+// Import pattern from JSON file
+const importFileInput = document.getElementById('importPatternFile');
+document.getElementById('importPatternBtn').onclick = ()=>{
+  importFileInput.click();
+};
+importFileInput.onchange = (e)=>{
+  const file = e.target.files[0];
+  if(!file){return;}
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    try{
+      const data = JSON.parse(ev.target.result);
+      if(!data.pattern || !data.pattern.sequencer){
+        updateStatus('Invalid pattern file');
+        return;
+      }
+      const name = data.name || file.name.replace(/\.json$/i, '');
+      const patterns = getPatterns();
+      // If name exists, append number
+      let finalName = name;
+      let counter = 1;
+      while(patterns[finalName]){
+        finalName = `${name} (${counter})`;
+        counter++;
+      }
+      patterns[finalName] = data.pattern;
+      savePatterns(patterns);
+      updatePatternSelect();
+      updateStatus(`Imported pattern: ${finalName}`);
+    }catch(err){
+      updateStatus('Failed to import pattern: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  importFileInput.value = ''; // Reset for re-import
+};
+
+updatePatternSelect();
+
+// ========== EXPORT TO WAV (PATTERN) ==========
+document.getElementById('exportWavBtn').onclick = async ()=>{
+  const loadedPads = samples.map((s,i) => s ? i : -1).filter(i => i >= 0);
+  if(loadedPads.length === 0){updateStatus('Load at least one sample first');return;}
+  updateStatus('Rendering WAV...');
+  const duration = (60/bpm)*4; // 4 bars = 16 steps
+  const offlineCtx = new OfflineAudioContext(2,audioCtx.sampleRate*duration,audioCtx.sampleRate);
+  const secondsPerBeat = 60.0/bpm;
+  const secondsPerStep = secondsPerBeat/4;
+
+  // Build offline effects chain
+  const filterFreq = document.getElementById('filter').value;
+  const resonance = parseFloat(document.getElementById('resonance').value);
+
+  for(let step=0;step<16;step++){
+    if(sequencer[step]){
+      // Render ALL loaded pads on this step
+      for(const padIdx of loadedPads){
+        const src = offlineCtx.createBufferSource();
+        src.buffer = samples[padIdx];
+        const gain = offlineCtx.createGain();
+        gain.gain.value = 0.6 / loadedPads.length; // Scale gain to avoid clipping
+        const time = step*secondsPerStep;
+        src.connect(gain);
+        // Apply filter in offline context
+        const filter = offlineCtx.createBiquadFilter();
+        filter.type='lowpass';
+        filter.frequency.value = filterFreq;
+        filter.Q.value = resonance;
+        gain.connect(filter);
+        filter.connect(offlineCtx.destination);
+        src.start(time);
+      }
+    }
+  }
+  const rendered = await offlineCtx.startRendering();
+  const wavBlob = audioBufferToWav(rendered);
+  const url = URL.createObjectURL(wavBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'tapeloop-pattern.wav';
+  a.click();
+  updateStatus('Exported WAV');
+};
+
+// ========== PER-PAD WAV EXPORT ==========
+function exportPadWav(padIndex){
+  if(!samples[padIndex]){updateStatus(`Pad ${padIndex+1} is empty`);return;}
+  const buffer = samples[padIndex];
+  const wavBlob = audioBufferToWav(buffer);
+  const url = URL.createObjectURL(wavBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `tapeloop-pad${padIndex+1}-${sampleNames[padIndex]||'sample'}.wav`;
+  a.click();
+  updateStatus(`Exported pad ${padIndex+1} as WAV`);
+}
+
+// ========== WAV ENCODER ==========
+function audioBufferToWav(buffer){
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const format = 1; // PCM
+  const bitDepth = 16;
+  const bytesPerSample = bitDepth/8;
+  const blockAlign = numChannels*bytesPerSample;
+  const dataLength = buffer.length*blockAlign;
+  const bufferLength = 44+dataLength;
+  const arrayBuffer = new ArrayBuffer(bufferLength);
+  const view = new DataView(arrayBuffer);
+  // RIFF header
+  writeString(view,0,'RIFF');
+  view.setUint32(4,36+dataLength,true);
+  writeString(view,8,'WAVE');
+  // fmt chunk
+  writeString(view,12,'fmt ');
+  view.setUint32(16,16,true);
+  view.setUint16(20,format,true);
+  view.setUint16(22,numChannels,true);
+  view.setUint32(24,sampleRate,true);
+  view.setUint32(28,sampleRate*blockAlign,true);
+  view.setUint16(32,blockAlign,true);
+  view.setUint16(34,bitDepth,true);
+  // data chunk
+  writeString(view,36,'data');
+  view.setUint32(40,dataLength,true);
+  // Interleave channels
+  const offset = 44;
+  const channels = [];
+  for(let i=0;i<numChannels;i++)channels.push(buffer.getChannelData(i));
+  for(let i=0;i<buffer.length;i++){
+    for(let c=0;c<numChannels;c++){
+      const sample = Math.max(-1,Math.min(1,channels[c][i]));
+      const intSample = sample<0?sample*0x8000:sample*0x7FFF;
+      view.setInt16(offset+(i*blockAlign)+(c*bytesPerSample),intSample,true);
+    }
+  }
+  return new Blob([arrayBuffer],{type:'audio/wav'});
+}
+function writeString(view,offset,string){
+  for(let i=0;i<string.length;i++)view.setUint8(offset+i,string.charCodeAt(i));
+}
+
+// ========== KEYBOARD SHORTCUTS ==========
+document.onkeydown = (e)=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
+  if(e.key>='1'&&e.key<='8'){e.preventDefault();triggerPad(parseInt(e.key)-1);}
+  if(e.key===' '){e.preventDefault();document.getElementById('playBtn').click();}
+  if(e.key==='r'||e.key==='R'){e.preventDefault();document.getElementById('recBtn').click();}
+  if(e.key==='s'||e.key==='S'){e.preventDefault();document.getElementById('savePatternBtn').click();}
+  if(e.key==='l'||e.key==='L'){e.preventDefault();document.getElementById('loadPatternBtn').click();}
+  if(e.key==='e'||e.key==='E'){e.preventDefault();document.getElementById('exportWavBtn').click();}
+};
+
+// ========== VISUALIZER ==========
+const canvas = document.getElementById('visualizer');
+const ctx = canvas.getContext('2d');
+canvas.width = 600;canvas.height = 100;
+const analyser = audioCtx.createAnalyser();
+analyser.fftSize = 256;
+function draw(){
+  requestAnimationFrame(draw);
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(data);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  const barWidth = canvas.width/data.length;
+  for(let i=0;i<data.length;i++){
+    const h = data[i]/255*canvas.height;
+    ctx.fillStyle = `hsl(${280+i},100%,50%)`;
+    ctx.fillRect(i*barWidth,canvas.height-h,barWidth-1,h);
+  }
+}
+draw();
+
+function updateStatus(msg){document.getElementById('status').textContent=msg;}
+
+// ========== MIDI CONTROLLER SUPPORT ==========
+loadMidiMap();
+updateMidiDisplay();
+
+function updateMidiStatus(text, type='default'){
+  const el = document.getElementById('midi-status');
+  el.textContent = text;
+  el.className = type === 'connected' ? 'connected' : type === 'error' ? 'error' : '';
+}
+
+function onMidiMessage(event){
+  const [status, data1, data2] = event.data;
+  const command = status & 0xF0;
+  const channel = status & 0x0F;
+  const note = data1;
+  const velocity = data2;
+
+  // Note On (0x90) with velocity > 0
+  if(command === 0x90 && velocity > 0){
+    if(midiLearnMode){
+      midiMap[note] = selectedPad;
+      saveMidiMap();
+      updateMidiDisplay();
+      midiLearnMode = false;
+      document.getElementById('midiLearnBtn').classList.remove('active-learn');
+      updateStatus(`MIDI Learn: Note ${note} → Pad ${selectedPad+1}`);
+      clearTimeout(midiLearnTimeout);
+      return;
+    }
+    if(midiMap[note] !== undefined){
+      triggerPad(midiMap[note]);
+    }
+  }
+
+  // CC messages (0xB0)
+  if(command === 0xB0){
+    handleMidiCC(note, velocity);
+  }
+}
+
+function handleMidiCC(ccNumber, value){
+  // CC 74 = Filter Cutoff, CC 71 = Resonance (standard MIDI assignments)
+  const normalized = value / 127;
+
+  if(ccNumber === 74){
+    // Filter cutoff: 100Hz - 5000Hz
+    const freq = 100 + normalized * 4900;
+    document.getElementById('filter').value = Math.round(freq);
+    updateStatus(`MIDI CC74: Filter cutoff ${Math.round(freq)}Hz`);
+  }else if(ccNumber === 71){
+    // Resonance: 0 - 30
+    const res = normalized * 30;
+    document.getElementById('resonance').value = res;
+    updateStatus(`MIDI CC71: Resonance ${res.toFixed(1)}`);
+  }
+}
+
+function initMidi(){
+  if(!navigator.requestMIDIAccess){
+    updateMidiStatus('MIDI: not supported in this browser', 'error');
+    document.getElementById('midiLearnBtn').disabled = true;
+    return;
+  }
+  navigator.requestMIDIAccess({ sysex: false })
+    .then((access)=>{
+      midiAccess = access;
+      updateMidiStatus(`MIDI: ${access.inputs.size} device(s) connected`, 'connected');
+      access.inputs.forEach((input)=>{
+        input.onmidimessage = onMidiMessage;
+      });
+      access.onstatechange = (e)=>{
+        const port = e.port;
+        if(port.type === 'input'){
+          if(port.state === 'connected'){
+            port.onmidimessage = onMidiMessage;
+            updateMidiStatus(`MIDI: ${port.name} connected`, 'connected');
+          }else{
+            updateMidiStatus(`MIDI: ${port.name} disconnected`);
+          }
+        }
+      };
+    })
+    .catch((err)=>{
+      updateMidiStatus('MIDI: ' + err.message, 'error');
+    });
+}
+
+// MIDI Learn button
+document.getElementById('midiLearnBtn').onclick = ()=>{
+  if(midiLearnMode){
+    midiLearnMode = false;
+    document.getElementById('midiLearnBtn').classList.remove('active-learn');
+    clearTimeout(midiLearnTimeout);
+    updateStatus('MIDI Learn cancelled');
+  }else{
+    midiLearnMode = true;
+    document.getElementById('midiLearnBtn').classList.add('active-learn');
+    updateStatus(`MIDI Learn: Play a note to assign to Pad ${selectedPad+1}...`);
+    midiLearnTimeout = setTimeout(()=>{
+      if(midiLearnMode){
+        midiLearnMode = false;
+        document.getElementById('midiLearnBtn').classList.remove('active-learn');
+        updateStatus('MIDI Learn timed out');
+      }
+    }, 10000);
+  }
+};
+
+// MIDI Reset button
+document.getElementById('midiResetBtn').onclick = ()=>{
+  if(confirm('Reset MIDI mapping to defaults?')){
+    midiMap = getDefaultMidiMap();
+    saveMidiMap();
+    updateMidiDisplay();
+    updateStatus('MIDI mapping reset to defaults');
+  }
+};
+
+// Initialize MIDI on load
+initMidi();
+
+// ========== PWA SERVICE WORKER REGISTRATION ==========
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('service-worker.js')
+    .then((reg)=>{
+      console.log('TapeLoop SW registered:', reg.scope);
+      updateStatus('App ready for offline use');
+    })
+    .catch((err)=>{ console.log('TapeLoop SW registration failed:', err); });
+}
+
+// ========== PWA INSTALL PROMPT ==========
+let deferredInstallPrompt = null;
+const installBtn = document.getElementById('installBtn');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  installBtn.style.display = 'inline-block';
+  updateStatus('App can be installed — click 📲 INSTALL APP');
+});
+
+installBtn.onclick = async () => {
+  if(!deferredInstallPrompt){
+    updateStatus('App is already installed or not installable');
+    return;
+  }
+  deferredInstallPrompt.prompt();
+  const { outcome } = await deferredInstallPrompt.userChoice;
+  if(outcome === 'accepted'){
+    updateStatus('App installed successfully');
+    installBtn.style.display = 'none';
+  }else{
+    updateStatus('Installation declined');
+  }
+  deferredInstallPrompt = null;
+};
+
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  installBtn.style.display = 'none';
+  updateStatus('TapeLoop installed!');
+});
+</script>
+</body>
+</html>
