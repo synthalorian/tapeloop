@@ -16,7 +16,7 @@ A lo-fi audio sampler and sequencer in the browser. Record loops, apply tape eff
 - 🎵 **Tap tempo** — tap to set BPM
 - 🎹 **MIDI controller support** — map any MIDI device to pads with MIDI Learn
 - 📲 **PWA support** — install as an offline-capable app
-- 🚫 **Zero dependencies** — vanilla JS, runs anywhere
+- 🚫 **Zero runtime dependencies** — vanilla JS, runs anywhere
 
 ## Usage
 
@@ -108,6 +108,17 @@ Pure HTML5 + vanilla JavaScript. Web Audio API for synthesis, Web MIDI API for c
 - [ ] Sample trimming / start-end points
 - [ ] Flanger / reverb effects
 - [ ] Multiple pattern banks / song mode
+
+## Testing
+
+The app itself ships as a single dependency-free `index.html`. A vitest + jsdom
+harness (dev-only) boots the real page with a mocked AudioContext and exercises
+the WAV encoder, MIDI mapping, and pattern persistence:
+
+```bash
+npm install
+npm test   # 15 tests
+```
 
 ## License
 
