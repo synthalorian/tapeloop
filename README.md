@@ -6,7 +6,10 @@ A lo-fi audio sampler and sequencer in the browser. Record loops, apply tape eff
 
 - 🎹 **8 sample pads** — click or press `1-8` to trigger
 - 🎚️ **Dual 16-step sequencers** — two independent tracks with mute and solo, synced playback
-- 🎛️ **Lo-fi effects** — tape wobble, bitcrush, lowpass filter, delay, chorus, compressor
+- 🎛️ **Lo-fi effects** — tape wobble, bitcrush, lowpass filter, delay, chorus, flanger, reverb, compressor
+- ✂️ **Sample trimming** — set start/end points per pad with visual indicators
+- 🏦 **Pattern banks** — 4 banks (A/B/C/D) with independent sequencer patterns
+- 🎵 **Song mode** — chain patterns from different banks into sequences
 - 📺 **Visualizer** — retro frequency bars reacting to audio
 - 💾 **Record/export** — capture your mix to `.webm`
 - 📂 **Drag-and-drop** — drop audio files directly onto pads
@@ -43,7 +46,15 @@ python -m http.server 8080
 | Wobble / Crush / Filter / Resonance knobs | Adjust effects |
 | Delay Time / Delay FB / Delay Mix | Slapback/echo effect |
 | Chorus Rate / Chorus Depth / Chorus Mix | Subtle pitch modulation |
+| Flanger Rate / Depth / FB / Mix | Jet-like sweeping effect |
+| Reverb Size / Damp / Mix | Ambient space simulation |
 | Comp Thr / Comp Ratio / Comp Gain | Dynamics compression |
+| Pad 1/2 Start / End sliders | Trim sample playback range |
+| Bank A/B/C/D buttons | Switch between pattern banks |
+| 🎵 SONG button | Toggle song mode |
+| + ADD CURRENT | Add current bank to song chain |
+| CLEAR | Clear song chain |
+| SAVE/LOAD SONG | Persist song arrangements |
 | Record button (`R`) | Capture live mix to `.webm` |
 | EXPORT WAV button (`E`) | Render pattern to `.wav` |
 | SAVE PATTERN button (`S`) | Save current pattern to localStorage |
@@ -52,6 +63,31 @@ python -m http.server 8080
 | IMPORT JSON button | Import pattern from JSON file |
 | 📲 INSTALL APP button | Install TapeLoop as PWA |
 | Spacebar | Play / Stop sequencer |
+
+## Sample Trimming
+
+Set start and end points for pads 1 and 2 to control which portion of the sample plays:
+
+- **Start slider**: Sets the beginning point (0-100% of sample)
+- **End slider**: Sets the end point (0-100% of sample)
+- **Visual indicator**: Cyan bar on pad shows the trimmed range
+- Trim points are saved with patterns and persist across sessions
+
+## Pattern Banks & Song Mode
+
+### Banks
+- 4 independent banks (A, B, C, D) each with their own 2-track sequencer pattern
+- Switch banks instantly with the A/B/C/D buttons
+- Current bank is highlighted in magenta
+
+### Song Mode
+- Click **🎵 SONG** to enter song mode
+- **+ ADD CURRENT**: Adds the current bank to the song chain
+- **CLEAR**: Removes all steps from the song chain
+- Click any step in the chain to jump to that bank (when stopped)
+- Click **×** on a step to remove it
+- During playback, the sequencer automatically advances through the song chain
+- Save/load song arrangements with SAVE SONG / LOAD SONG
 
 ## MIDI Controller Support
 
@@ -89,8 +125,10 @@ The signal flows through effects in this order:
 1. **Compressor** — controls dynamics (threshold, ratio, makeup gain)
 2. **Lowpass Filter** — shapes tone with adjustable resonance (100Hz - 5kHz, Q 0-30)
 3. **Chorus** — LFO-modulated delay for width and movement, with dry/wet mix
-4. **Delay** — feedback echo with adjustable time and dry/wet mix
-5. **Bitcrush** — sample rate reduction for lo-fi grit
+4. **Flanger** — Short modulated delay with feedback for jet-like sweeping
+5. **Reverb** — Algorithmic multi-tap delay for ambient space
+6. **Delay** — feedback echo with adjustable time and dry/wet mix
+7. **Bitcrush** — sample rate reduction for lo-fi grit
 
 ## Architecture
 
@@ -105,9 +143,9 @@ Pure HTML5 + vanilla JavaScript. Web Audio API for synthesis, Web MIDI API for c
 - [x] PWA offline support with install prompt
 - [x] Export to WAV (pattern + individual pads)
 - [x] Full effects chain (delay, chorus, compressor, filter, bitcrush)
-- [ ] Sample trimming / start-end points
-- [ ] Flanger / reverb effects
-- [ ] Multiple pattern banks / song mode
+- [x] Sample trimming / start-end points
+- [x] Flanger / reverb effects
+- [x] Multiple pattern banks / song mode
 
 ## Testing
 

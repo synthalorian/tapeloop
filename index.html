@@ -21,6 +21,7 @@ h1{color:#ff00ff;text-shadow:0 0 20px #ff00ff;margin-bottom:1rem;font-size:2.5re
 .pad .export-btn{position:absolute;top:4px;right:4px;background:transparent;border:none;color:#00ffff;font-size:.7rem;cursor:pointer;padding:2px;opacity:.6;transition:opacity .2s}
 .pad .export-btn:hover{opacity:1}
 .pad .midi-note{position:absolute;bottom:4px;left:4px;font-size:.6rem;color:#888}
+.pad .trim-indicator{position:absolute;bottom:0;left:0;height:3px;background:#00ffff;opacity:.6;pointer-events:none}
 #controls{display:flex;gap:2rem;align-items:center;margin:1rem 0;flex-wrap:wrap;justify-content:center}
 .knob-group{display:flex;flex-direction:column;align-items:center;gap:.3rem}
 label{color:#888;font-size:.75rem;text-transform:uppercase}
@@ -58,6 +59,28 @@ button.active-learn{background:#ff00ff;color:#000;animation:pulse .5s infinite a
 #effects-section{display:flex;gap:1.5rem;align-items:center;flex-wrap:wrap;justify-content:center;margin:.5rem 0;padding:.5rem;border:1px solid #333;border-radius:8px;background:#111}
 .effect-group{display:flex;flex-direction:column;align-items:center;gap:.3rem}
 .effect-group label{color:#00ffff;font-size:.7rem}
+
+/* Trim controls */
+#trim-section{display:flex;gap:1.5rem;align-items:center;flex-wrap:wrap;justify-content:center;margin:.5rem 0;padding:.5rem;border:1px solid #333;border-radius:8px;background:#111}
+.trim-group{display:flex;flex-direction:column;align-items:center;gap:.3rem}
+.trim-group label{color:#ff00ff;font-size:.7rem}
+.trim-group input[type=range]{width:100px}
+.trim-group span{font-size:.65rem;color:#888}
+
+/* Bank controls */
+#bank-section{display:flex;gap:1rem;align-items:center;flex-wrap:wrap;justify-content:center;margin:.5rem 0;padding:.5rem;border:1px solid #333;border-radius:8px;background:#111}
+.bank-btn{background:#1a1a2e;border:2px solid #666;color:#888;padding:.4rem 1rem;font-family:inherit;cursor:pointer;font-size:.9rem;min-width:50px}
+.bank-btn:hover{border-color:#ff00ff;color:#ff00ff}
+.bank-btn.active{background:#ff00ff;color:#000;border-color:#ff00ff}
+.bank-btn.song-mode{background:#00ffff;color:#000;border-color:#00ffff}
+
+/* Song mode */
+#song-section{display:flex;gap:1rem;align-items:center;flex-wrap:wrap;justify-content:center;margin:.5rem 0;padding:.5rem;border:1px solid #333;border-radius:8px;background:#111}
+#song-chain{display:flex;gap:.3rem;flex-wrap:wrap;align-items:center}
+.song-step{background:#1a1a2e;border:1px solid #666;color:#888;padding:.3rem .6rem;font-size:.75rem;cursor:pointer;position:relative}
+.song-step:hover{border-color:#ff00ff;color:#ff00ff}
+.song-step.current{border-color:#00ffff;color:#00ffff}
+.song-step .remove{position:absolute;top:-8px;right:-8px;background:#ff0000;color:#fff;border-radius:50%;width:16px;height:16px;font-size:.6rem;display:flex;align-items:center;justify-content:center;cursor:pointer}
 </style>
 </head>
 <body>
@@ -68,6 +91,27 @@ button.active-learn{background:#ff00ff;color:#000;animation:pulse .5s infinite a
   <span id="midi-status">MIDI: not connected</span>
   <button id="midiLearnBtn">MIDI LEARN</button>
   <button id="midiResetBtn">RESET MAPPING</button>
+</div>
+
+<!-- Bank Controls -->
+<div id="bank-section">
+  <label>BANK:</label>
+  <button class="bank-btn active" data-bank="A">A</button>
+  <button class="bank-btn" data-bank="B">B</button>
+  <button class="bank-btn" data-bank="C">C</button>
+  <button class="bank-btn" data-bank="D">D</button>
+  <button id="songModeBtn" class="bank-btn">🎵 SONG</button>
+</div>
+
+<!-- Song Mode -->
+<div id="song-section" style="display:none">
+  <label>SONG CHAIN:</label>
+  <div id="song-chain"></div>
+  <button id="addToSongBtn">+ ADD CURRENT</button>
+  <button id="clearSongBtn">CLEAR</button>
+  <button id="saveSongBtn">SAVE SONG</button>
+  <button id="loadSongBtn">LOAD SONG</button>
+  <select id="songSelect"><option value="">-- select song --</option></select>
 </div>
 
 <div id="controls">
@@ -87,6 +131,14 @@ button.active-learn{background:#ff00ff;color:#000;animation:pulse .5s infinite a
   </div>
 </div>
 
+<!-- Trim Controls -->
+<div id="trim-section">
+  <div class="trim-group"><label>Pad 1 Start</label><input type="range" id="trimStart0" min="0" max="100" value="0"><span id="trimStart0Val">0%</span></div>
+  <div class="trim-group"><label>Pad 1 End</label><input type="range" id="trimEnd0" min="0" max="100" value="100"><span id="trimEnd0Val">100%</span></div>
+  <div class="trim-group"><label>Pad 2 Start</label><input type="range" id="trimStart1" min="0" max="100" value="0"><span id="trimStart1Val">0%</span></div>
+  <div class="trim-group"><label>Pad 2 End</label><input type="range" id="trimEnd1" min="0" max="100" value="100"><span id="trimEnd1Val">100%</span></div>
+</div>
+
 <!-- Effects -->
 <div id="effects-section">
   <div class="knob-group"><label>Wobble</label><input type="range" id="wobble" min="0" max="100" value="20"></div>
@@ -99,6 +151,13 @@ button.active-learn{background:#ff00ff;color:#000;animation:pulse .5s infinite a
   <div class="effect-group"><label>Chorus Rate</label><input type="range" id="chorusRate" min="0" max="100" value="0"></div>
   <div class="effect-group"><label>Chorus Depth</label><input type="range" id="chorusDepth" min="0" max="100" value="50"></div>
   <div class="effect-group"><label>Chorus Mix</label><input type="range" id="chorusMix" min="0" max="100" value="30"></div>
+  <div class="effect-group"><label>Flanger Rate</label><input type="range" id="flangerRate" min="0" max="100" value="0"></div>
+  <div class="effect-group"><label>Flanger Depth</label><input type="range" id="flangerDepth" min="0" max="100" value="50"></div>
+  <div class="effect-group"><label>Flanger FB</label><input type="range" id="flangerFeedback" min="0" max="95" value="50"></div>
+  <div class="effect-group"><label>Flanger Mix</label><input type="range" id="flangerMix" min="0" max="100" value="50"></div>
+  <div class="effect-group"><label>Reverb Size</label><input type="range" id="reverbSize" min="0" max="100" value="0"></div>
+  <div class="effect-group"><label>Reverb Damp</label><input type="range" id="reverbDamp" min="0" max="100" value="50"></div>
+  <div class="effect-group"><label>Reverb Mix</label><input type="range" id="reverbMix" min="0" max="100" value="30"></div>
   <div class="effect-group"><label>Comp Thr</label><input type="range" id="compThreshold" min="-60" max="0" value="-24"></div>
   <div class="effect-group"><label>Comp Ratio</label><input type="range" id="compRatio" min="1" max="20" value="4"></div>
   <div class="effect-group"><label>Comp Gain</label><input type="range" id="compGain" min="0" max="20" value="6"></div>
@@ -144,6 +203,22 @@ let timerID = null;
 let track1Mute = false, track1Solo = false;
 let track2Mute = false, track2Solo = false;
 
+// ========== TRIM STATE ==========
+let trimPoints = Array(8).fill(null).map(()=>({start:0, end:1}));
+
+// ========== BANK STATE ==========
+let currentBank = 'A';
+let banks = {
+  A: {sequencer: Array(16).fill(false), sequencer2: Array(16).fill(false)},
+  B: {sequencer: Array(16).fill(false), sequencer2: Array(16).fill(false)},
+  C: {sequencer: Array(16).fill(false), sequencer2: Array(16).fill(false)},
+  D: {sequencer: Array(16).fill(false), sequencer2: Array(16).fill(false)}
+};
+let songMode = false;
+let songChain = [];
+let currentSongStep = 0;
+const SONG_KEY = 'tapeloop_songs';
+
 // ========== MIDI STATE ==========
 let midiAccess = null;
 let midiMap = {}; // noteNumber -> padIndex
@@ -181,6 +256,205 @@ function updateMidiDisplay(){
   });
 }
 
+// ========== TRIM FUNCTIONS ==========
+function updateTrimDisplay(padIdx){
+  const trim = trimPoints[padIdx];
+  const pad = document.querySelectorAll('.pad')[padIdx];
+  let indicator = pad.querySelector('.trim-indicator');
+  if(!indicator){
+    indicator = document.createElement('div');
+    indicator.className = 'trim-indicator';
+    pad.appendChild(indicator);
+  }
+  const startPct = trim.start * 100;
+  const widthPct = (trim.end - trim.start) * 100;
+  indicator.style.left = startPct + '%';
+  indicator.style.width = widthPct + '%';
+  
+  // Update slider displays
+  const startSlider = document.getElementById('trimStart' + padIdx);
+  const endSlider = document.getElementById('trimEnd' + padIdx);
+  const startVal = document.getElementById('trimStart' + padIdx + 'Val');
+  const endVal = document.getElementById('trimEnd' + padIdx + 'Val');
+  if(startSlider) startSlider.value = Math.round(trim.start * 100);
+  if(endSlider) endSlider.value = Math.round(trim.end * 100);
+  if(startVal) startVal.textContent = Math.round(trim.start * 100) + '%';
+  if(endVal) endVal.textContent = Math.round(trim.end * 100) + '%';
+}
+
+function setTrimPoint(padIdx, type, value){
+  if(type === 'start'){
+    trimPoints[padIdx].start = Math.min(value, trimPoints[padIdx].end - 0.01);
+  }else{
+    trimPoints[padIdx].end = Math.max(value, trimPoints[padIdx].start + 0.01);
+  }
+  updateTrimDisplay(padIdx);
+}
+
+function initTrimControls(){
+  for(let i=0;i<2;i++){
+    const startSlider = document.getElementById('trimStart' + i);
+    const endSlider = document.getElementById('trimEnd' + i);
+    if(startSlider){
+      startSlider.oninput = (e)=>{
+        setTrimPoint(i, 'start', e.target.value / 100);
+      };
+    }
+    if(endSlider){
+      endSlider.oninput = (e)=>{
+        setTrimPoint(i, 'end', e.target.value / 100);
+      };
+    }
+    updateTrimDisplay(i);
+  }
+}
+
+// ========== BANK FUNCTIONS ==========
+function switchBank(bank){
+  // Save current state to current bank
+  banks[currentBank].sequencer = [...sequencer];
+  banks[currentBank].sequencer2 = [...sequencer2];
+  
+  // Switch to new bank
+  currentBank = bank;
+  sequencer = [...banks[bank].sequencer];
+  sequencer2 = [...banks[bank].sequencer2];
+  
+  // Update UI
+  document.querySelectorAll('.bank-btn[data-bank]').forEach(btn=>{
+    btn.classList.toggle('active', btn.dataset.bank === bank);
+  });
+  updateSequencerDisplay();
+  updateStatus(`Switched to Bank ${bank}`);
+}
+
+function updateSequencerDisplay(){
+  document.querySelectorAll('#sequencer .step').forEach((s,i)=>s.classList.toggle('active',sequencer[i]));
+  document.querySelectorAll('#sequencer2 .step').forEach((s,i)=>s.classList.toggle('active',sequencer2[i]));
+}
+
+function initBankControls(){
+  document.querySelectorAll('.bank-btn[data-bank]').forEach(btn=>{
+    btn.onclick = ()=>{
+      if(songMode){
+        toggleSongMode();
+      }
+      switchBank(btn.dataset.bank);
+    };
+  });
+  
+  document.getElementById('songModeBtn').onclick = toggleSongMode;
+  document.getElementById('addToSongBtn').onclick = addToSong;
+  document.getElementById('clearSongBtn').onclick = clearSong;
+  document.getElementById('saveSongBtn').onclick = saveSong;
+  document.getElementById('loadSongBtn').onclick = loadSong;
+}
+
+function toggleSongMode(){
+  songMode = !songMode;
+  document.getElementById('song-section').style.display = songMode ? 'flex' : 'none';
+  document.getElementById('songModeBtn').classList.toggle('song-mode', songMode);
+  if(songMode){
+    updateSongChainDisplay();
+    updateStatus('Song mode: ON - Chain patterns from banks');
+  }else{
+    updateStatus('Song mode: OFF');
+  }
+}
+
+function addToSong(){
+  songChain.push(currentBank);
+  updateSongChainDisplay();
+  updateStatus(`Added Bank ${currentBank} to song (position ${songChain.length})`);
+}
+
+function removeFromSong(index){
+  songChain.splice(index, 1);
+  updateSongChainDisplay();
+}
+
+function clearSong(){
+  songChain = [];
+  currentSongStep = 0;
+  updateSongChainDisplay();
+  updateStatus('Song chain cleared');
+}
+
+function updateSongChainDisplay(){
+  const chainDiv = document.getElementById('song-chain');
+  chainDiv.innerHTML = '';
+  songChain.forEach((bank, idx)=>{
+    const step = document.createElement('div');
+    step.className = 'song-step';
+    if(idx === currentSongStep && isPlaying) step.classList.add('current');
+    step.textContent = bank;
+    step.onclick = ()=>{
+      if(!isPlaying){
+        switchBank(bank);
+        currentSongStep = idx;
+        updateSongChainDisplay();
+      }
+    };
+    const remove = document.createElement('span');
+    remove.className = 'remove';
+    remove.textContent = '×';
+    remove.onclick = (e)=>{
+      e.stopPropagation();
+      removeFromSong(idx);
+    };
+    step.appendChild(remove);
+    chainDiv.appendChild(step);
+  });
+}
+
+function getSongs(){
+  try{return JSON.parse(localStorage.getItem(SONG_KEY))||{};}catch(e){return {};}
+}
+
+function saveSongs(songs){
+  localStorage.setItem(SONG_KEY, JSON.stringify(songs));
+}
+
+function updateSongSelect(){
+  const select = document.getElementById('songSelect');
+  const songs = getSongs();
+  select.innerHTML = '<option value="">-- select song --</option>';
+  Object.keys(songs).forEach(name=>{
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    select.appendChild(opt);
+  });
+}
+
+function saveSong(){
+  const name = prompt('Song name:');
+  if(!name)return;
+  const songs = getSongs();
+  songs[name] = {chain: [...songChain], bpm};
+  saveSongs(songs);
+  updateSongSelect();
+  updateStatus(`Saved song: ${name}`);
+}
+
+function loadSong(){
+  const name = document.getElementById('songSelect').value;
+  if(!name){updateStatus('Select a song first');return;}
+  const songs = getSongs();
+  const s = songs[name];
+  if(!s){updateStatus('Song not found');return;}
+  songChain = [...s.chain];
+  bpm = s.bpm || 120;
+  document.getElementById('bpmSlider').value = bpm;
+  document.getElementById('bpmVal').textContent = bpm;
+  currentSongStep = 0;
+  if(songChain.length > 0){
+    switchBank(songChain[0]);
+  }
+  updateSongChainDisplay();
+  updateStatus(`Loaded song: ${name}`);
+}
+
 // ========== PAD CREATION ==========
 const padsDiv = document.getElementById('pads');
 for(let i=0;i<8;i++){
@@ -210,6 +484,11 @@ for(let i=0;i<8;i++){
   const midiNote = document.createElement('span');
   midiNote.className='midi-note';
   pad.appendChild(midiNote);
+
+  // Trim indicator
+  const trimIndicator = document.createElement('div');
+  trimIndicator.className='trim-indicator';
+  pad.appendChild(trimIndicator);
 
   pad.onclick = ()=>{ selectedPad = i; triggerPad(i); };
   const fileInput = document.createElement('input');
@@ -275,7 +554,13 @@ function triggerPad(idx){
   gain.gain.value = 0.8;
   src.connect(gain);
   applyEffects(gain);
-  src.start();
+  
+  // Apply trim points
+  const trim = trimPoints[idx];
+  const offset = trim.start * samples[idx].duration;
+  const duration = (trim.end - trim.start) * samples[idx].duration;
+  src.start(0, offset, duration);
+  
   const pad = document.querySelectorAll('.pad')[idx];
   pad.classList.add('active');
   setTimeout(()=>pad.classList.remove('active'),100);
@@ -292,6 +577,13 @@ function applyEffects(node, destination = masterGain){
   const chorusRateVal = document.getElementById('chorusRate').value/100;
   const chorusDepthVal = document.getElementById('chorusDepth').value/100;
   const chorusMixVal = document.getElementById('chorusMix').value/100;
+  const flangerRateVal = document.getElementById('flangerRate').value/100;
+  const flangerDepthVal = document.getElementById('flangerDepth').value/100;
+  const flangerFeedbackVal = document.getElementById('flangerFeedback').value/100;
+  const flangerMixVal = document.getElementById('flangerMix').value/100;
+  const reverbSizeVal = document.getElementById('reverbSize').value/100;
+  const reverbDampVal = document.getElementById('reverbDamp').value/100;
+  const reverbMixVal = document.getElementById('reverbMix').value/100;
   const compThresholdVal = parseFloat(document.getElementById('compThreshold').value);
   const compRatioVal = parseFloat(document.getElementById('compRatio').value);
   const compGainVal = parseFloat(document.getElementById('compGain').value);
@@ -362,7 +654,101 @@ function applyEffects(node, destination = masterGain){
     currentNode = chorusMixGain;
   }
 
-  // 4. Delay with feedback and mix
+  // 4. Flanger (similar to chorus but with feedback and shorter delay)
+  if(flangerRateVal > 0){
+    const flangerInput = audioCtx.createGain();
+    flangerInput.gain.value = 1;
+    currentNode.connect(flangerInput);
+
+    // Dry path
+    const dryGain = audioCtx.createGain();
+    dryGain.gain.value = 1 - flangerMixVal;
+    flangerInput.connect(dryGain);
+
+    // Wet path
+    const wetGain = audioCtx.createGain();
+    wetGain.gain.value = flangerMixVal;
+
+    const flangerDelay = audioCtx.createDelay();
+    flangerDelay.delayTime.value = 0.005; // 5ms base delay (shorter than chorus)
+
+    const lfo = audioCtx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 0.1 + flangerRateVal * 9.9; // 0.1Hz to 10Hz
+
+    const lfoGain = audioCtx.createGain();
+    lfoGain.gain.value = flangerDepthVal * 0.005; // 0 to 5ms modulation
+
+    lfo.connect(lfoGain);
+    lfoGain.connect(flangerDelay.delayTime);
+    lfo.start();
+
+    // Feedback path
+    const feedbackGain = audioCtx.createGain();
+    feedbackGain.gain.value = flangerFeedbackVal;
+
+    flangerInput.connect(flangerDelay);
+    flangerDelay.connect(feedbackGain);
+    feedbackGain.connect(flangerDelay); // feedback loop
+    flangerDelay.connect(wetGain);
+
+    // Mix dry + wet back together
+    const flangerMixGain = audioCtx.createGain();
+    flangerMixGain.gain.value = 1;
+    dryGain.connect(flangerMixGain);
+    wetGain.connect(flangerMixGain);
+    currentNode = flangerMixGain;
+  }
+
+  // 5. Reverb (algorithmic using multiple delays)
+  if(reverbSizeVal > 0){
+    const reverbInput = audioCtx.createGain();
+    reverbInput.gain.value = 1;
+    currentNode.connect(reverbInput);
+
+    // Dry path
+    const dryGain = audioCtx.createGain();
+    dryGain.gain.value = 1 - reverbMixVal;
+    reverbInput.connect(dryGain);
+
+    // Wet path - create multiple parallel delays for reverb effect
+    const wetGain = audioCtx.createGain();
+    wetGain.gain.value = reverbMixVal;
+
+    const reverbMixGain = audioCtx.createGain();
+    reverbMixGain.gain.value = 1;
+
+    // Create multiple delay taps for reverb
+    const delays = [];
+    const delayTimes = [0.03, 0.05, 0.07, 0.09, 0.11, 0.13]; // Various delay times in seconds
+    const baseDecay = 0.5 + reverbSizeVal * 0.5; // Decay time based on size
+
+    delayTimes.forEach((time, idx)=>{
+      const delay = audioCtx.createDelay();
+      delay.delayTime.value = time * (0.5 + reverbSizeVal);
+      
+      const delayGain = audioCtx.createGain();
+      // Damping: higher frequencies decay faster
+      const dampFactor = 1 - (reverbDampVal * 0.5);
+      delayGain.gain.value = baseDecay * dampFactor * (1 - idx * 0.15);
+      
+      reverbInput.connect(delay);
+      delay.connect(delayGain);
+      delayGain.connect(reverbMixGain);
+      
+      delays.push({delay, gain: delayGain});
+    });
+
+    // Mix dry + wet back together
+    const finalMixGain = audioCtx.createGain();
+    finalMixGain.gain.value = 1;
+    dryGain.connect(finalMixGain);
+    reverbMixGain.connect(wetGain);
+    wetGain.connect(finalMixGain);
+    currentNode = finalMixGain;
+  }
+
+  // 6. Delay with feedback and mix
   if(delayTimeVal > 0){
     const delayInput = audioCtx.createGain();
     delayInput.gain.value = 1;
@@ -396,10 +782,10 @@ function applyEffects(node, destination = masterGain){
     currentNode = delayMixGain;
   }
 
-  // 5. Connect to analyser for visualizer
+  // 7. Connect to analyser for visualizer
   currentNode.connect(analyser);
 
-  // 6. Bitcrush (downsample)
+  // 8. Bitcrush (downsample)
   if(crush>0){
     const bufferSize = 4096;
     const crusher = audioCtx.createScriptProcessor(bufferSize,1,1);
@@ -428,7 +814,12 @@ function playScheduledPad(padIndex, time){
     gain.gain.value = 0.6;
     src.connect(gain);
     applyEffects(gain);
-    src.start(time);
+    
+    // Apply trim points
+    const trim = trimPoints[padIndex];
+    const offset = trim.start * samples[padIndex].duration;
+    const duration = (trim.end - trim.start) * samples[padIndex].duration;
+    src.start(time, offset, duration);
   }
 }
 
@@ -454,6 +845,14 @@ function schedule(){
     currentStep = (currentStep+1)%16;
     nextNoteTime += secondsPerStep;
   }
+  
+  // Handle song mode progression
+  if(songMode && songChain.length > 0 && currentStep === 0){
+    currentSongStep = (currentSongStep + 1) % songChain.length;
+    switchBank(songChain[currentSongStep]);
+    updateSongChainDisplay();
+  }
+  
   timerID = requestAnimationFrame(schedule);
 }
 
@@ -463,10 +862,16 @@ document.getElementById('playBtn').onclick = ()=>{
   document.getElementById('playBtn').textContent = isPlaying?'⏹ STOP':'▶ PLAY';
   if(isPlaying){
     nextNoteTime = audioCtx.currentTime+0.05;
+    if(songMode && songChain.length > 0){
+      currentSongStep = 0;
+      switchBank(songChain[0]);
+      updateSongChainDisplay();
+    }
     schedule();
   }else{
     cancelAnimationFrame(timerID);
     document.querySelectorAll('#sequencer .step, #sequencer2 .step').forEach(s=>s.classList.remove('current'));
+    document.querySelectorAll('.song-step').forEach(s=>s.classList.remove('current'));
   }
 };
 
@@ -561,7 +966,13 @@ document.getElementById('savePatternBtn').onclick = ()=>{
   const name = prompt('Pattern name:');
   if(!name)return;
   const patterns = getPatterns();
-  patterns[name] = {sequencer:[...sequencer],sequencer2:[...sequencer2],bpm};
+  patterns[name] = {
+    sequencer:[...sequencer],
+    sequencer2:[...sequencer2],
+    bpm,
+    trimPoints: JSON.parse(JSON.stringify(trimPoints)),
+    bank: currentBank
+  };
   savePatterns(patterns);
   updatePatternSelect();
   updateStatus(`Saved pattern: ${name}`);
@@ -577,6 +988,20 @@ document.getElementById('loadPatternBtn').onclick = ()=>{
   bpm = p.bpm||120;
   document.getElementById('bpmSlider').value = bpm;
   document.getElementById('bpmVal').textContent = bpm;
+  
+  // Load trim points if available
+  if(p.trimPoints){
+    trimPoints = JSON.parse(JSON.stringify(p.trimPoints));
+    for(let i=0;i<2;i++){
+      updateTrimDisplay(i);
+    }
+  }
+  
+  // Load bank if available
+  if(p.bank && banks[p.bank]){
+    switchBank(p.bank);
+  }
+  
   document.querySelectorAll('#sequencer .step').forEach((s,i)=>s.classList.toggle('active',sequencer[i]));
   document.querySelectorAll('#sequencer2 .step').forEach((s,i)=>s.classList.toggle('active',sequencer2[i]));
   updateStatus(`Loaded pattern: ${name}`);
@@ -598,9 +1023,10 @@ document.getElementById('exportPatternBtn').onclick = ()=>{
   const patterns = getPatterns();
   const pattern = patterns[name];
   if(!pattern){updateStatus('Pattern not found');return;}
+
   const exportData = {
     name: name,
-    version: '1.0',
+    version: '1.1',
     created: new Date().toISOString(),
     pattern: pattern
   };
@@ -653,6 +1079,7 @@ importFileInput.onchange = (e)=>{
 };
 
 updatePatternSelect();
+updateSongSelect();
 
 // ========== EXPORT TO WAV (PATTERN) ==========
 document.getElementById('exportWavBtn').onclick = async ()=>{
@@ -666,6 +1093,13 @@ document.getElementById('exportWavBtn').onclick = async ()=>{
   // Build offline effects chain
   const filterFreq = document.getElementById('filter').value;
   const resonance = parseFloat(document.getElementById('resonance').value);
+  const flangerRateVal = document.getElementById('flangerRate').value/100;
+  const flangerDepthVal = document.getElementById('flangerDepth').value/100;
+  const flangerFeedbackVal = document.getElementById('flangerFeedback').value/100;
+  const flangerMixVal = document.getElementById('flangerMix').value/100;
+  const reverbSizeVal = document.getElementById('reverbSize').value/100;
+  const reverbDampVal = document.getElementById('reverbDamp').value/100;
+  const reverbMixVal = document.getElementById('reverbMix').value/100;
 
   for(let step=0;step<16;step++){
     const time = step*secondsPerStep;
@@ -676,13 +1110,106 @@ document.getElementById('exportWavBtn').onclick = async ()=>{
       const gain = offlineCtx.createGain();
       gain.gain.value = 0.6;
       src.connect(gain);
+      
+      let currentNode = gain;
+      
+      // Apply filter
       const filter = offlineCtx.createBiquadFilter();
       filter.type='lowpass';
       filter.frequency.value = filterFreq;
       filter.Q.value = resonance;
-      gain.connect(filter);
-      filter.connect(offlineCtx.destination);
-      src.start(time);
+      currentNode.connect(filter);
+      currentNode = filter;
+      
+      // Apply flanger if enabled
+      if(flangerRateVal > 0){
+        const flangerInput = offlineCtx.createGain();
+        flangerInput.gain.value = 1;
+        currentNode.connect(flangerInput);
+        
+        const dryGain = offlineCtx.createGain();
+        dryGain.gain.value = 1 - flangerMixVal;
+        flangerInput.connect(dryGain);
+        
+        const wetGain = offlineCtx.createGain();
+        wetGain.gain.value = flangerMixVal;
+        
+        const flangerDelay = offlineCtx.createDelay();
+        flangerDelay.delayTime.value = 0.005;
+        
+        const lfo = offlineCtx.createOscillator();
+        lfo.type = 'sine';
+        lfo.frequency.value = 0.1 + flangerRateVal * 9.9;
+        
+        const lfoGain = offlineCtx.createGain();
+        lfoGain.gain.value = flangerDepthVal * 0.005;
+        
+        lfo.connect(lfoGain);
+        lfoGain.connect(flangerDelay.delayTime);
+        lfo.start();
+        
+        const feedbackGain = offlineCtx.createGain();
+        feedbackGain.gain.value = flangerFeedbackVal;
+        
+        flangerInput.connect(flangerDelay);
+        flangerDelay.connect(feedbackGain);
+        feedbackGain.connect(flangerDelay);
+        flangerDelay.connect(wetGain);
+        
+        const flangerMixGain = offlineCtx.createGain();
+        flangerMixGain.gain.value = 1;
+        dryGain.connect(flangerMixGain);
+        wetGain.connect(flangerMixGain);
+        currentNode = flangerMixGain;
+      }
+      
+      // Apply reverb if enabled
+      if(reverbSizeVal > 0){
+        const reverbInput = offlineCtx.createGain();
+        reverbInput.gain.value = 1;
+        currentNode.connect(reverbInput);
+        
+        const dryGain = offlineCtx.createGain();
+        dryGain.gain.value = 1 - reverbMixVal;
+        reverbInput.connect(dryGain);
+        
+        const wetGain = offlineCtx.createGain();
+        wetGain.gain.value = reverbMixVal;
+        
+        const reverbMixGain = offlineCtx.createGain();
+        reverbMixGain.gain.value = 1;
+        
+        const delayTimes = [0.03, 0.05, 0.07, 0.09, 0.11, 0.13];
+        const baseDecay = 0.5 + reverbSizeVal * 0.5;
+        
+        delayTimes.forEach((time, idx)=>{
+          const delay = offlineCtx.createDelay();
+          delay.delayTime.value = time * (0.5 + reverbSizeVal);
+          
+          const delayGain = offlineCtx.createGain();
+          const dampFactor = 1 - (reverbDampVal * 0.5);
+          delayGain.gain.value = baseDecay * dampFactor * (1 - idx * 0.15);
+          
+          reverbInput.connect(delay);
+          delay.connect(delayGain);
+          delayGain.connect(reverbMixGain);
+        });
+        
+        const finalMixGain = offlineCtx.createGain();
+        finalMixGain.gain.value = 1;
+        dryGain.connect(finalMixGain);
+        reverbMixGain.connect(wetGain);
+        wetGain.connect(finalMixGain);
+        currentNode = finalMixGain;
+      }
+      
+      currentNode.connect(offlineCtx.destination);
+      
+      // Apply trim points
+      const trim = trimPoints[0];
+      const offset = trim.start * samples[0].duration;
+      const duration = (trim.end - trim.start) * samples[0].duration;
+      src.start(time, offset, duration);
     }
     // Track 2 -> pad 1
     if(sequencer2[step] && samples[1]){
@@ -691,13 +1218,106 @@ document.getElementById('exportWavBtn').onclick = async ()=>{
       const gain = offlineCtx.createGain();
       gain.gain.value = 0.6;
       src.connect(gain);
+      
+      let currentNode = gain;
+      
+      // Apply filter
       const filter = offlineCtx.createBiquadFilter();
       filter.type='lowpass';
       filter.frequency.value = filterFreq;
       filter.Q.value = resonance;
-      gain.connect(filter);
-      filter.connect(offlineCtx.destination);
-      src.start(time);
+      currentNode.connect(filter);
+      currentNode = filter;
+      
+      // Apply flanger if enabled
+      if(flangerRateVal > 0){
+        const flangerInput = offlineCtx.createGain();
+        flangerInput.gain.value = 1;
+        currentNode.connect(flangerInput);
+        
+        const dryGain = offlineCtx.createGain();
+        dryGain.gain.value = 1 - flangerMixVal;
+        flangerInput.connect(dryGain);
+        
+        const wetGain = offlineCtx.createGain();
+        wetGain.gain.value = flangerMixVal;
+        
+        const flangerDelay = offlineCtx.createDelay();
+        flangerDelay.delayTime.value = 0.005;
+        
+        const lfo = offlineCtx.createOscillator();
+        lfo.type = 'sine';
+        lfo.frequency.value = 0.1 + flangerRateVal * 9.9;
+        
+        const lfoGain = offlineCtx.createGain();
+        lfoGain.gain.value = flangerDepthVal * 0.005;
+        
+        lfo.connect(lfoGain);
+        lfoGain.connect(flangerDelay.delayTime);
+        lfo.start();
+        
+        const feedbackGain = offlineCtx.createGain();
+        feedbackGain.gain.value = flangerFeedbackVal;
+        
+        flangerInput.connect(flangerDelay);
+        flangerDelay.connect(feedbackGain);
+        feedbackGain.connect(flangerDelay);
+        flangerDelay.connect(wetGain);
+        
+        const flangerMixGain = offlineCtx.createGain();
+        flangerMixGain.gain.value = 1;
+        dryGain.connect(flangerMixGain);
+        wetGain.connect(flangerMixGain);
+        currentNode = flangerMixGain;
+      }
+      
+      // Apply reverb if enabled
+      if(reverbSizeVal > 0){
+        const reverbInput = offlineCtx.createGain();
+        reverbInput.gain.value = 1;
+        currentNode.connect(reverbInput);
+        
+        const dryGain = offlineCtx.createGain();
+        dryGain.gain.value = 1 - reverbMixVal;
+        reverbInput.connect(dryGain);
+        
+        const wetGain = offlineCtx.createGain();
+        wetGain.gain.value = reverbMixVal;
+        
+        const reverbMixGain = offlineCtx.createGain();
+        reverbMixGain.gain.value = 1;
+        
+        const delayTimes = [0.03, 0.05, 0.07, 0.09, 0.11, 0.13];
+        const baseDecay = 0.5 + reverbSizeVal * 0.5;
+        
+        delayTimes.forEach((time, idx)=>{
+          const delay = offlineCtx.createDelay();
+          delay.delayTime.value = time * (0.5 + reverbSizeVal);
+          
+          const delayGain = offlineCtx.createGain();
+          const dampFactor = 1 - (reverbDampVal * 0.5);
+          delayGain.gain.value = baseDecay * dampFactor * (1 - idx * 0.15);
+          
+          reverbInput.connect(delay);
+          delay.connect(delayGain);
+          delayGain.connect(reverbMixGain);
+        });
+        
+        const finalMixGain = offlineCtx.createGain();
+        finalMixGain.gain.value = 1;
+        dryGain.connect(finalMixGain);
+        reverbMixGain.connect(wetGain);
+        wetGain.connect(finalMixGain);
+        currentNode = finalMixGain;
+      }
+      
+      currentNode.connect(offlineCtx.destination);
+      
+      // Apply trim points
+      const trim = trimPoints[1];
+      const offset = trim.start * samples[1].duration;
+      const duration = (trim.end - trim.start) * samples[1].duration;
+      src.start(time, offset, duration);
     }
   }
   const rendered = await offlineCtx.startRendering();
@@ -922,6 +1542,8 @@ document.getElementById('midiResetBtn').onclick = ()=>{
 
 // Initialize MIDI on load
 initMidi();
+initTrimControls();
+initBankControls();
 
 // ========== PWA SERVICE WORKER REGISTRATION ==========
 if('serviceWorker' in navigator){
