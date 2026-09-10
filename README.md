@@ -160,7 +160,7 @@ npm test   # 15 tests
 
 ## License
 
-MIT
+Apache-2.0
 
 ---
 
