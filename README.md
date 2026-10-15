@@ -1,3 +1,5 @@
+![tapeloop](.github/preview.png)
+
 # 🎛️ TapeLoop
 
 A lo-fi audio sampler and sequencer in the browser. Record loops, apply tape effects, build beats, and connect your MIDI controller.
